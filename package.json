@@ -1,0 +1,20 @@
+{
+  "name": "pi-toolkit",
+  "version": "0.1.0",
+  "description": "Skills, extensions & tools for pi coding agent — web search, web fetch, subagent delegation, autonomous engineering loop",
+  "author": "BalTac",
+  "license": "MIT",
+  "pi": {
+    "extensions": [
+      "./extensions/web-search.ts",
+      "./extensions/subagent-setup.ts",
+      "./extensions/web-fetch"
+    ],
+    "skills": [
+      "./skills/web-search",
+      "./skills/web-fetch",
+      "./skills/subagent",
+      "./skills/loop"
+    ]
+  }
+}
