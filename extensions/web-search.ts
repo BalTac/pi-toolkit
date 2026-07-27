@@ -799,9 +799,10 @@ export default function webSearchExtension(pi: ExtensionAPI) {
       const lines: string[] = [];
 
       // Summary header
+      const totalResults = response.number_of_results ?? response.results.length;
       const summaryParts: string[] = [
         `**Search:** "${response.query}"`,
-        `${response.number_of_results.toLocaleString()} total results`,
+        `${totalResults.toLocaleString()} total results`,
         `**Provider:** ${finalProviderName}`,
       ];
       if (searchParams.page > 1) summaryParts.push(`page ${searchParams.page}`);
@@ -840,7 +841,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
       // Results
       if (results.length > 0) {
         lines.push(`\n---\n`);
-        lines.push(`### Results (showing ${results.length} of ${response.number_of_results})\n`);
+        lines.push(`### Results (showing ${results.length} of ${totalResults})\n`);
         const formatted = results
           .map((r, i) => {
             const title = stripHtml(r.title) || "(no title)";
@@ -876,7 +877,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
           text,
           details: {
             query: response.query,
-            totalResults: response.number_of_results,
+            totalResults: totalResults,
             returnedResults: results.length,
             provider: finalProviderName,
             fallbackChain: chain,
@@ -900,7 +901,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
         content: [{ type: "text", text }],
         details: {
           query: response.query,
-          totalResults: response.number_of_results,
+          totalResults: totalResults,
           returnedResults: results.length,
           provider: finalProviderName,
           fallbackChain: chain,
