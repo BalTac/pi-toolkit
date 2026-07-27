@@ -1,0 +1,55 @@
+{
+  "_comment": "Copy the 'subagents' block below into your ~/.pi/agent/settings.json. Pick models that exist in your environment (check with: pi --list-models). The subagent-setup wizard does this interactively — you only need this file if you prefer manual setup.",
+
+  "subagents": {
+    "defaultModel": "YOUR_FAST_CHEAP_MODEL",
+    "agentOverrides": {
+      "planner":         { "model": "YOUR_POWERFUL_MODEL" },
+      "worker":          { "model": "YOUR_POWERFUL_MODEL" },
+      "reviewer":        { "model": "YOUR_POWERFUL_MODEL" },
+      "oracle":          { "model": "YOUR_POWERFUL_MODEL" },
+      "context-builder": { "model": "YOUR_POWERFUL_MODEL" }
+    }
+  },
+
+  "_examples": {
+    "deepseek": {
+      "subagents": {
+        "defaultModel": "deepseek-v4-flash",
+        "agentOverrides": {
+          "planner": { "model": "deepseek-v4-pro" },
+          "worker": { "model": "deepseek-v4-pro" },
+          "reviewer": { "model": "deepseek-v4-pro" },
+          "oracle": { "model": "deepseek-v4-pro" },
+          "context-builder": { "model": "deepseek-v4-pro" }
+        }
+      }
+    },
+    "anthropic": {
+      "subagents": {
+        "defaultModel": "claude-haiku-4.5",
+        "agentOverrides": {
+          "planner": { "model": "claude-sonnet-4.5" },
+          "worker": { "model": "claude-sonnet-4.5" },
+          "reviewer": { "model": "claude-sonnet-4.5" },
+          "oracle": { "model": "claude-opus-4.5" },
+          "context-builder": { "model": "claude-sonnet-4.5" }
+        }
+      }
+    },
+    "openai": {
+      "subagents": {
+        "defaultModel": "gpt-5-mini",
+        "agentOverrides": {
+          "planner": { "model": "gpt-5.4" },
+          "worker": { "model": "gpt-5.4" },
+          "reviewer": { "model": "gpt-5.4" },
+          "oracle": { "model": "gpt-5.4" },
+          "context-builder": { "model": "gpt-5.4" }
+        }
+      }
+    }
+  },
+
+  "_note": "The subagent-setup extension (included) will offer to configure this interactively on first /reload if models are missing. You don't need to edit this file manually."
+}
