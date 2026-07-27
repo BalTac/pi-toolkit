@@ -170,6 +170,42 @@ subagent delegation at each step.
 - [pi-intercom](https://github.com/nicobailon/pi-intercom) (optional, `pi install npm:pi-intercom`)
 - `web_fetch` npm deps (jsdom, @mozilla/readability, turndown, metascraper — auto-installed by `pi install`)
 
+## Conflict handling
+
+### Same-name skills
+
+pi loads skills in this order: **global** (`~/.pi/agent/skills/`) → **packages** (npm/git installs) → **project** (`.pi/skills/`). The **first** one found wins. Later definitions with the same name show a warning and are ignored.
+
+If you already have a global `web-search` or `web-fetch` skill, it will shadow the one from this toolkit. To fix:
+
+```bash
+# Option A: remove the old one
+rm -rf ~/.pi/agent/skills/web-search
+
+# Option B: rename the old one
+mv ~/.pi/agent/skills/web-search ~/.pi/agent/skills/web-search-old
+```
+
+Then `/reload`.
+
+### Same-purpose tools with different names
+
+No technical conflict — both appear in "Available tools". However, two similar tools can:
+- **Waste tokens** — two descriptions in the system prompt instead of one
+- **Cause suboptimal picks** — the LLM chooses the less capable tool if its description is clearer
+
+If you already have a search/fetch tool, decide which one to keep and disable the other:
+
+```bash
+# Disable a specific extension
+mv ~/.pi/agent/extensions/old-search.ts ~/.pi/agent/extensions/old-search.ts.disabled
+
+# Or disable via settings (if the extension supports it)
+# See the extension's docs for tool enable/disable flags
+```
+
+Then `/reload`.
+
 ## License
 
 MIT
