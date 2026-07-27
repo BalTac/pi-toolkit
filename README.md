@@ -38,9 +38,12 @@ pi install git:github.com/BalTac/pi-toolkit
 ### 2. Install community dependencies
 
 ```bash
-pi install npm:pi-subagents   # subagent delegation + contact_supervisor
-pi install npm:pi-intercom    # cross-session messaging (optional)
+pi install npm:pi-subagents     # subagent delegation + contact_supervisor
+pi install npm:pi-intercom      # cross-session messaging (optional)
+pi install git:github.com/nicobailon/pi-web-access  # web search/fetch tools for subagents
 ```
+
+> **Note:** `pi-web-access` provides `fetch_content` and `get_search_content` tools required by the `researcher` subagent. Without it, the researcher will fail.
 
 ### 3. Configure models for subagents
 
@@ -168,6 +171,7 @@ subagent delegation at each step.
 - [pi coding agent](https://github.com/earendil-works/pi) (any supported OS)
 - [pi-subagents](https://github.com/nicobailon/pi-subagents) (`pi install npm:pi-subagents`)
 - [pi-intercom](https://github.com/nicobailon/pi-intercom) (optional, `pi install npm:pi-intercom`)
+- [pi-web-access](https://github.com/nicobailon/pi-web-access) (recommended, `pi install git:github.com/nicobailon/pi-web-access` — provides tools required by the `researcher` subagent)
 - `web_fetch` npm deps (jsdom, @mozilla/readability, turndown, metascraper — auto-installed by `pi install`)
 
 ## Conflict handling
@@ -188,23 +192,23 @@ mv ~/.pi/agent/skills/web-search ~/.pi/agent/skills/web-search-old
 
 Then `/reload`.
 
-### Same-purpose tools with different names
+### Compatibility with pi-web-access
 
-No technical conflict — both appear in "Available tools". However, two similar tools can:
-- **Waste tokens** — two descriptions in the system prompt instead of one
-- **Cause suboptimal picks** — the LLM chooses the less capable tool if its description is clearer
+This toolkit and [`pi-web-access`](https://github.com/nicobailon/pi-web-access) both provide web search capabilities:
 
-If you already have a search/fetch tool, decide which one to keep and disable the other:
+| Tool | pi-toolkit | pi-web-access |
+|------|-----------|---------------|
+| `web_search` | ✅ Multi-provider (SearxNG, Tavily, Brave, DDG) | ✅ Multi-provider (OpenAI, Brave, Tavily, SearXNG, etc.) |
+| `web_fetch` | ✅ Readability + Turndown + Metascraper | — |
+| `fetch_content` | — | ✅ Fetch with extraction |
+| `get_search_content` | — | ✅ Content from search results |
 
-```bash
-# Disable a specific extension
-mv ~/.pi/agent/extensions/old-search.ts ~/.pi/agent/extensions/old-search.ts.disabled
+**`web_search` name overlap:** both packages register `web_search`. pi resolves conflicts by priority — the first loaded wins. If you need pi-web-access's version, ensure it loads before pi-toolkit (list it first in `packages`).
 
-# Or disable via settings (if the extension supports it)
-# See the extension's docs for tool enable/disable flags
-```
-
-Then `/reload`.
+**When both are installed**, you get the best of both:
+- `web_search` (from whichever loads first)
+- `web_fetch` (from pi-toolkit)
+- `fetch_content` + `get_search_content` (from pi-web-access, used by the `researcher` subagent)
 
 ## License
 
