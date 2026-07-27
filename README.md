@@ -40,10 +40,7 @@ pi install git:github.com/BalTac/pi-toolkit
 ```bash
 pi install npm:pi-subagents     # subagent delegation + contact_supervisor
 pi install npm:pi-intercom      # cross-session messaging (optional)
-pi install git:github.com/nicobailon/pi-web-access  # web search/fetch tools for subagents
 ```
-
-> **Note:** `pi-web-access` provides `fetch_content` and `get_search_content` tools required by the `researcher` subagent. Without it, the researcher will fail.
 
 ### 3. Configure models for subagents
 
@@ -115,12 +112,12 @@ DuckDuckGo and raw scraping are always available — they use public HTML endpoi
 
 ## Subagent delegation
 
-Available agents after installing `pi-subagents`:
+Available agents after installing `pi-subagents` (plus the custom `researcher` and `analyst` from this toolkit):
 
 | Agent | Tier | Purpose |
 |-------|------|---------|
 | `scout` | light | Fast local codebase recon → compressed findings |
-| `researcher` | light | Web/docs research with cited sources |
+| `researcher` | light | Web/docs research with cited sources (custom — uses web_search + web_fetch) |
 | `analyst` | light | Read-only measurements and reports (custom) |
 | `delegate` | light | General-purpose child close to parent behavior |
 | `planner` | powerful | Concrete implementation plans (read-only) |
@@ -171,7 +168,6 @@ subagent delegation at each step.
 - [pi coding agent](https://github.com/earendil-works/pi) (any supported OS)
 - [pi-subagents](https://github.com/nicobailon/pi-subagents) (`pi install npm:pi-subagents`)
 - [pi-intercom](https://github.com/nicobailon/pi-intercom) (optional, `pi install npm:pi-intercom`)
-- [pi-web-access](https://github.com/nicobailon/pi-web-access) (recommended, `pi install git:github.com/nicobailon/pi-web-access` — provides tools required by the `researcher` subagent)
 - `web_fetch` npm deps (jsdom, @mozilla/readability, turndown, metascraper — auto-installed by `pi install`)
 
 ## Conflict handling
@@ -208,7 +204,8 @@ This toolkit and [`pi-web-access`](https://github.com/nicobailon/pi-web-access) 
 **When both are installed**, you get the best of both:
 - `web_search` (from whichever loads first)
 - `web_fetch` (from pi-toolkit)
-- `fetch_content` + `get_search_content` (from pi-web-access, used by the `researcher` subagent)
+
+**Recommendation:** Skip pi-web-access. This toolkit's `web_search` + `web_fetch` cover the same functionality, and installing both causes a tool name conflict on `web_search`. The custom `researcher` agent included here uses these tools natively.
 
 ## License
 
