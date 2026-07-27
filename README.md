@@ -32,7 +32,7 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 ### 1. Install this toolkit
 
 ```bash
-pi install github:BalTac/pi-toolkit
+pi install git:github.com/BalTac/pi-toolkit
 ```
 
 ### 2. Install community dependencies
