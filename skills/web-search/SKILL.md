@@ -26,21 +26,169 @@ environment, `web_search` is provided by one of these extensions:
   raw scraping. Zero npm deps, auto-detects provider. Disabled by default when
   pi-web-access is installed to avoid tool-name conflicts.
 
-Both extensions share `~/.pi/agent/web-search/config.json`.
-No API keys required for DuckDuckGo scraping — works immediately.
+---
+
+## ⚠️ CONFIGURATION — READ THIS FIRST
+
+The **unified config file** is:
+
+```
+~/.pi/web-search.json
+```
+
+This single file configures **both** pi-toolkit and pi-web-access. Write it once.
+
+### Template: SearxNG on a private IP (e.g. 192.168.50.222:8080)
+
+If the user gives you a SearxNG URL on a private/lan IP, write this exact file:
+
+```json
+{
+  "searchProvider": "searxng",
+  "searxngBaseUrl": "http://<IP>:<PORT>",
+  "fallbackChain": ["searxng", "duckduckgo", "raw"],
+  "providers": {
+    "duckduckgo": { "enabled": true },
+    "raw": { "enabled": true }
+  },
+  "ssrf": {
+    "allowRanges": ["<IP>/24", "<IP>/32"]
+  }
+}
+```
+
+**Replace `<IP>` and `<PORT>`** with the actual values. Include **both** `/24` and `/32` in `allowRanges`.
+
+Example for `192.168.50.222:8080`:
+
+```json
+{
+  "searchProvider": "searxng",
+  "searxngBaseUrl": "http://192.168.50.222:8080",
+  "fallbackChain": ["searxng", "duckduckgo", "raw"],
+  "providers": {
+    "duckduckgo": { "enabled": true },
+    "raw": { "enabled": true }
+  },
+  "ssrf": {
+    "allowRanges": ["192.168.50.0/24", "192.168.50.222/32"]
+  }
+}
+```
+
+> **Why `ssrf.allowRanges`?** pi-web-access blocks requests to private IPs
+> (192.168.x.x, 10.x.x.x, 172.16-31.x.x) as a security measure. Without this,
+> searches to a LAN SearxNG will fail with "Blocked internal address".
+> Both `/24` (subnet) and `/32` (exact IP) are included for robustness.
+
+### Template: SearxNG on localhost
+
+```json
+{
+  "searchProvider": "searxng",
+  "searxngBaseUrl": "http://localhost:8080",
+  "fallbackChain": ["searxng", "duckduckgo", "raw"],
+  "providers": {
+    "duckduckgo": { "enabled": true },
+    "raw": { "enabled": true }
+  },
+  "ssrf": {
+    "allowRanges": ["127.0.0.0/8"]
+  }
+}
+```
+
+### Template: SearxNG on a public domain (no SSRF needed)
+
+```json
+{
+  "searchProvider": "searxng",
+  "searxngBaseUrl": "https://search.example.com",
+  "fallbackChain": ["searxng", "duckduckgo", "raw"],
+  "providers": {
+    "duckduckgo": { "enabled": true },
+    "raw": { "enabled": true }
+  }
+}
+```
+
+### Template: DuckDuckGo only (zero config)
+
+If no SearxNG is available, DuckDuckGo scraping works with zero keys:
+
+```json
+{
+  "searchProvider": "duckduckgo",
+  "fallbackChain": ["duckduckgo", "raw"],
+  "providers": {
+    "duckduckgo": { "enabled": true },
+    "raw": { "enabled": true }
+  }
+}
+```
+
+### Template: Tavily or Brave (API keys)
+
+```json
+{
+  "searchProvider": "tavily",
+  "fallbackChain": ["tavily", "duckduckgo", "raw"],
+  "providers": {
+    "tavily": { "apiKey": "$TAVILY_API_KEY" },
+    "duckduckgo": { "enabled": true },
+    "raw": { "enabled": true }
+  }
+}
+```
+
+The `$VAR` syntax resolves environment variables at runtime.
+
+---
 
 ## Available Providers
 
 | Provider | Type | API Key? | Best for |
 |----------|------|----------|----------|
 | **SearxNG** | Self-hosted API | ❌ | Privacy, multi-engine aggregation, infoboxes/answers |
-| **Tavily** | SaaS API | ✅ (`$TAVILY_API_KEY`) | AI-optimized results, LLM-generated answers |
-| **Brave** | SaaS API | ✅ (`$BRAVE_API_KEY`) | 2000 req/month free tier, web+news+video |
+| **Tavily** | SaaS API | ✅ (`TAVILY_API_KEY`) | AI-optimized results, LLM-generated answers |
+| **Brave** | SaaS API | ✅ (`BRAVE_API_KEY`) | 2000 req/month free tier, web+news+video |
 | **DuckDuckGo** | HTML scraping | ❌ | Zero-config, always available, no keys |
 | **Raw** | DDG Lite scraping | ❌ | Absolute fallback, ultra-light HTML |
 
-Config file: `~/.pi/agent/web-search/config.json`
-(created automatically on first run — no setup needed for DuckDuckGo)
+> **pi-web-access** adds: OpenAI, Parallel, TinyFish, Search1API, Searchinfinity,
+> Querit, SERPdive, Exa, Perplexity, Gemini, AnySearch. See its own docs for
+> provider-specific API key setup.
+
+---
+
+## Field reference for `~/.pi/web-search.json`
+
+| Field | Used by | Description |
+|-------|---------|-------------|
+| `searchProvider` | both | Default provider name: `searxng`, `tavily`, `brave`, `duckduckgo`, `raw` |
+| `searxngBaseUrl` | both | SearxNG endpoint URL. Root-level, not nested in `providers` |
+| `fallbackChain` | pi-toolkit | Ordered list of providers to try if the primary fails |
+| `providers.<name>` | pi-toolkit | Per-provider config: `baseUrl` (legacy), `apiKey`, `enabled` |
+| `ssrf.allowRanges` | pi-web-access | CIDR ranges exempt from SSRF blocking (needed for LAN IPs) |
+
+> **Legacy note:** pi-toolkit v3.0 used `~/.pi/agent/web-search/config.json`
+> with `provider` (now `searchProvider`) and `providers.searxng.baseUrl` (now
+> root-level `searxngBaseUrl`). If you find a legacy config, migrate it to the
+> unified format above — or pi-toolkit v3.1+ will auto-migrate on first load.
+
+---
+
+## Setup procedure (for AI agents)
+
+When a user asks you to set up web search with a SearxNG endpoint:
+
+1. **Determine the IP**: if it's a private IP (starts with `192.168.`, `10.`, `172.16.` through `172.31.`, or `127.`), you MUST include `ssrf.allowRanges`
+2. **Write `~/.pi/web-search.json`** using the exact template above — replace `<IP>` and `<PORT>`
+3. **For private IPs**: derive the `/24` subnet (replace last octet with `0`) and add both `/24` and `/32` ranges
+4. **Test** with a simple search query to confirm it works
+5. **If it fails** with "Blocked internal address": the `ssrf.allowRanges` is missing or wrong — fix and retry
+
+---
 
 ## How to Search
 
@@ -57,6 +205,12 @@ Call the `web_search` tool with these parameters:
 - **`page`** (optional, default 1): Pagination (1-based).
 - **`noCache`** (optional, default false): Force a fresh search.
 
+> **pi-web-aware note:** pi-web-access supports additional parameters:
+> `queries` (array of strings for multi-angle research), `numResults`,
+> `includeContent`, `recencyFilter`, `domainFilter`, `provider`, `workflow`.
+> Check its tool description for details. Prefer `queries` with 2-4 varied
+> angles over a single `query` for broader coverage.
+
 ## Fallback Chain
 
 If the primary provider fails (timeout, rate limit, error), the next provider
@@ -65,40 +219,6 @@ in the chain is tried automatically. Default chain:
 ```
 searxng → duckduckgo → raw
 ```
-
-You can customize this in `config.json`. Example:
-
-```json
-{
-  "provider": "tavily",
-  "fallbackChain": ["tavily", "brave", "duckduckgo", "raw"],
-  "providers": {
-    "tavily": { "apiKey": "$TAVILY_API_KEY" },
-    "brave": { "apiKey": "$BRAVE_API_KEY" },
-    "duckduckgo": { "enabled": true },
-    "raw": { "enabled": true }
-  }
-}
-```
-
-## Provider-specific notes
-
-- **SearxNG**: Set `SEARXNG_URL` env var or configure `baseUrl` in providers.searxng.
-  Supports `categories`, `engines`, `language`, `time_range`, `safesearch`, `page`.
-  Returns `answers`, `infoboxes`, `corrections`, and `suggestions`.
-
-- **Tavily**: Set `TAVILY_API_KEY` env var. Supports `topic: "news"` → set categories to
-  `"news"`. Returns LLM-generated `answer` in addition to results. `search_depth`
-  defaults to `basic` (1 credit per search).
-
-- **Brave**: Set `BRAVE_API_KEY` env var. Supports web search and news search
-  (use `categories: "news"` for news endpoint). 2000 free requests/month.
-
-- **DuckDuckGo**: Zero config. Uses DDG's non-JS HTML endpoint. Results include
-  title, URL (decoded from DDG redirect), and snippet. No answers/infoboxes.
-
-- **Raw**: Absolute fallback. Uses DDG Lite (ultra-light HTML, no JavaScript
-  at all). Maximally portable — works on any OS with Node.js. No answers/infoboxes.
 
 ## Search Strategies
 
