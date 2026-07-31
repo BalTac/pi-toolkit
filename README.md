@@ -145,14 +145,14 @@ The `web-search` **skill** (`.md` instructions) works regardless of which extens
 3. Checks for `TAVILY_API_KEY` or `BRAVE_API_KEY` environment variables
 4. Falls back to DuckDuckGo scraping if nothing else is available
 
-If you want to change the provider later, edit `~/.pi/agent/web-search/config.json`:
+If you want to change the provider later, edit `~/.pi/web-search.json`:
 
 ```json
 {
-  "provider": "searxng",
+  "searchProvider": "searxng",
+  "searxngBaseUrl": "http://your-server:8080",
   "fallbackChain": ["searxng", "duckduckgo", "raw"],
   "providers": {
-    "searxng": { "baseUrl": "http://your-server:8080" },
     "tavily": { "apiKey": "$TAVILY_API_KEY" },
     "brave": { "apiKey": "$BRAVE_API_KEY" },
     "duckduckgo": { "enabled": true },
@@ -163,7 +163,9 @@ If you want to change the provider later, edit `~/.pi/agent/web-search/config.js
 
 The `$VAR` syntax resolves environment variables at runtime.
 
-> **Note:** `pi-web-access` uses the same config file (`~/.pi/agent/web-search/config.json`) with additional options. If both are installed (with the built-in enabled), they share the same config but the tool-name conflict will prevent pi from starting. Always keep only one `web_search` tool active.
+> **Migration:** if you had the old `~/.pi/agent/web-search/config.json`, it is automatically migrated to `~/.pi/web-search.json` on first load. The legacy `providers.searxng.baseUrl` field becomes the root-level `searxngBaseUrl`.
+
+> **Note:** `pi-web-access` uses the same unified config file (`~/.pi/web-search.json`). pi-toolkit's built-in `web_search` also reads/writes this file (with automatic migration from the old `~/.pi/agent/web-search/config.json`). Both extensions coexist peacefully on the same config — just never enable both `web_search` tools at once.
 
 ## Fallback chain (built-in search)
 

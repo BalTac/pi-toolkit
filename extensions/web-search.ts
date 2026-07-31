@@ -1,9 +1,10 @@
 /**
- * Web Search Extension v3.0 — Multi-Provider
+ * Web Search Extension v3.1 — Multi-Provider
  *
  * Supports: SearxNG (self-hosted), Tavily (AI-optimized API), Brave Search (API),
  * DuckDuckGo (HTML scraping), Raw (DDG Lite scraping, absolute fallback).
- * Configurable via ~/.pi/agent/web-search/config.json — zero npm deps.
+ * Configurable via ~/.pi/web-search.json (unified config shared with pi-web-access).
+ * Migrates automatically from the old ~/.pi/agent/web-search/config.json on first load.
  * Fallback chain: if primary provider fails, next is tried automatically.
  */
 
@@ -97,13 +98,21 @@ interface ProviderConfig {
 }
 
 interface WebSearchConfig {
-  provider: string;
+  // Unified fields (shared with pi-web-access)
+  searchProvider?: string;
+  provider?: string;                      // legacy alias for searchProvider
+  searxngBaseUrl?: string;                // unified SearxNG URL (pi-web-access compat)
+  // pi-toolkit specific
   fallbackChain: string[];
   providers: Record<string, ProviderConfig>;
 }
 
-const CONFIG_DIR = path.join(os.homedir(), ".pi", "agent", "web-search");
-const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
+// Unified config path (shared with pi-web-access)
+const CONFIG_DIR = path.join(os.homedir(), ".pi");
+const CONFIG_PATH = path.join(CONFIG_DIR, "web-search.json");
+// Legacy config path (auto-migrated on first load)
+const LEGACY_CONFIG_DIR = path.join(os.homedir(), ".pi", "agent", "web-search");
+const LEGACY_CONFIG_PATH = path.join(LEGACY_CONFIG_DIR, "config.json");
 
 function ensureConfigDir(): void {
   if (!fs.existsSync(CONFIG_DIR)) {
@@ -118,18 +127,75 @@ function resolveEnvVars(value: string): string {
   });
 }
 
+/** Resolve the effective provider name (searchProvider or legacy provider field). */
+function resolveProviderName(cfg: WebSearchConfig): string {
+  return cfg.searchProvider ?? cfg.provider ?? "searxng";
+}
+
+/**
+ * Load config from the unified path (~/.pi/web-search.json).
+ * If not found, migrates from the legacy path (~/.pi/agent/web-search/config.json).
+ */
 function loadConfig(): WebSearchConfig | null {
   try {
-    if (!fs.existsSync(CONFIG_PATH)) return null;
-    const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
-    const cfg = JSON.parse(raw) as WebSearchConfig;
-    // Resolve env vars in apiKey fields
-    for (const [name, pcfg] of Object.entries(cfg.providers)) {
-      if (pcfg.apiKey) {
-        cfg.providers[name].apiKey = resolveEnvVars(pcfg.apiKey);
+    if (fs.existsSync(CONFIG_PATH)) {
+      const raw = fs.readFileSync(CONFIG_PATH, "utf-8");
+      const cfg = JSON.parse(raw) as WebSearchConfig;
+      // Ensure fallbackChain has a default
+      if (!cfg.fallbackChain || cfg.fallbackChain.length === 0) {
+        cfg.fallbackChain = ["searxng", "duckduckgo", "raw"];
+      }
+      // Resolve env vars in apiKey fields
+      if (cfg.providers) {
+        for (const [name, pcfg] of Object.entries(cfg.providers)) {
+          if (pcfg.apiKey) {
+            cfg.providers[name].apiKey = resolveEnvVars(pcfg.apiKey);
+          }
+        }
+      }
+      return cfg;
+    }
+
+    // ── Migration from legacy path ─────────────────────────
+    if (fs.existsSync(LEGACY_CONFIG_PATH)) {
+      try {
+        const raw = fs.readFileSync(LEGACY_CONFIG_PATH, "utf-8");
+        const legacy = JSON.parse(raw) as {
+          provider?: string;
+          fallbackChain?: string[];
+          providers?: Record<string, ProviderConfig>;
+        };
+        // Convert to unified format
+        const cfg: WebSearchConfig = {
+          searchProvider: legacy.provider,
+          fallbackChain: legacy.fallbackChain ?? ["searxng", "duckduckgo", "raw"],
+          providers: {},
+        };
+        // Extract SearxNG baseUrl from legacy nested format
+        if (legacy.providers?.searxng?.baseUrl) {
+          cfg.searxngBaseUrl = legacy.providers.searxng.baseUrl;
+        }
+        // Copy non-searxng providers (searxng config is now at root level)
+        if (legacy.providers) {
+          for (const [name, pcfg] of Object.entries(legacy.providers)) {
+            if (name !== "searxng") {
+              cfg.providers[name] = pcfg;
+            }
+            if (pcfg.apiKey) {
+              cfg.providers[name] = { ...pcfg, apiKey: resolveEnvVars(pcfg.apiKey) };
+            }
+          }
+        }
+        // Write migrated config
+        saveConfig(cfg);
+        console.error(`[pi-toolkit web-search] Migrated config from ${LEGACY_CONFIG_PATH} to ${CONFIG_PATH}`);
+        return cfg;
+      } catch (err) {
+        console.error(`[pi-toolkit web-search] Failed to migrate legacy config: ${err instanceof Error ? err.message : err}`);
       }
     }
-    return cfg;
+
+    return null;
   } catch {
     return null;
   }
@@ -137,6 +203,7 @@ function loadConfig(): WebSearchConfig | null {
 
 function saveConfig(cfg: WebSearchConfig): void {
   ensureConfigDir();
+  // Write to unified path
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
 }
 
@@ -557,10 +624,15 @@ class RawProvider implements SearchProvider {
 
 // ── Provider factory ────────────────────────────────────────────────────
 
-function createProvider(name: string, cfg: ProviderConfig): SearchProvider | null {
+function createProvider(name: string, cfg: ProviderConfig, fullConfig?: WebSearchConfig): SearchProvider | null {
   switch (name) {
     case "searxng": {
-      const baseUrl = cfg.baseUrl ?? process.env.SEARXNG_URL ?? "http://192.168.50.222:8080";
+      // Priority: unified searxngBaseUrl → legacy providers.searxng.baseUrl → env var → default
+      const baseUrl = fullConfig?.searxngBaseUrl
+        ?? cfg.baseUrl
+        ?? process.env.SEARXNG_URL
+        ?? process.env.SEARXNG_BASE_URL
+        ?? "http://192.168.50.222:8080";
       return new SearxNGProvider(baseUrl);
     }
     case "tavily": {
@@ -745,7 +817,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
         if (signal.aborted) break;
 
         const pcfg = config?.providers?.[providerName] ?? {};
-        const provider = createProvider(providerName, pcfg);
+        const provider = createProvider(providerName, pcfg, config ?? undefined);
 
         if (!provider) {
           lastError = `Provider "${providerName}": not configured (missing API key or URL)`;
@@ -926,26 +998,26 @@ export default function webSearchExtension(pi: ExtensionAPI) {
     const config = loadConfig();
     if (config) {
       // Config exists — quick health check on primary provider
-      const primary = config.provider;
+      const primary = resolveProviderName(config);
       const pcfg = config.providers?.[primary] ?? {};
-      const provider = createProvider(primary, pcfg);
+      const provider = createProvider(primary, pcfg, config);
 
       if (provider) {
         // Test with a lightweight query
         provider
           .search({ query: "test", limit: 1, categories: "general", language: "all", page: 1 }, AbortSignal.timeout(5000))
           .then(() => {
-            ctx.ui.notify(`Web Search v3: "${primary}" ready`, "info");
+            ctx.ui.notify(`Web Search v3.1: "${primary}" ready`, "info");
           })
           .catch((err: Error) => {
             ctx.ui.notify(
-              `Web Search v3: "${primary}" unreachable (${err.message}). Fallback chain: ${config.fallbackChain.join(" → ")}`,
+              `Web Search v3.1: "${primary}" unreachable (${err.message}). Fallback chain: ${config.fallbackChain.join(" → ")}`,
               "warning"
             );
           });
       } else {
         ctx.ui.notify(
-          `Web Search v3: provider "${primary}" not configured. Check ${CONFIG_PATH}`,
+          `Web Search v3.1: provider "${primary}" not configured. Check ${CONFIG_PATH}`,
           "warning"
         );
       }
@@ -965,15 +1037,15 @@ export default function webSearchExtension(pi: ExtensionAPI) {
         );
         // SearxNG reachable via env var → create config
         saveConfig({
-          provider: "searxng",
+          searchProvider: "searxng",
+          searxngBaseUrl: envUrl,
           fallbackChain: ["searxng", "duckduckgo", "raw"],
           providers: {
-            searxng: { baseUrl: envUrl },
             duckduckgo: { enabled: true },
             raw: { enabled: true },
           },
         });
-        ctx.ui.notify(`Web Search v3: auto-configured SearxNG at ${envUrl}`, "info");
+        ctx.ui.notify(`Web Search v3.1: auto-configured SearxNG at ${envUrl}`, "info");
         return;
       } catch { /* env var instance not reachable */ }
     }
@@ -994,15 +1066,15 @@ export default function webSearchExtension(pi: ExtensionAPI) {
         );
         // Found!
         saveConfig({
-          provider: "searxng",
+          searchProvider: "searxng",
+          searxngBaseUrl: candidate,
           fallbackChain: ["searxng", "duckduckgo", "raw"],
           providers: {
-            searxng: { baseUrl: candidate },
             duckduckgo: { enabled: true },
             raw: { enabled: true },
           },
         });
-        ctx.ui.notify(`Web Search v3: auto-detected SearxNG at ${candidate}`, "info");
+        ctx.ui.notify(`Web Search v3.1: auto-detected SearxNG at ${candidate}`, "info");
         return;
       } catch { /* not reachable */ }
     }
@@ -1014,7 +1086,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
     if (tavilyKey || braveKey) {
       const provider = tavilyKey ? "tavily" : "brave";
       saveConfig({
-        provider,
+        searchProvider: provider,
         fallbackChain: [provider, "duckduckgo", "raw"],
         providers: {
           [provider]: { apiKey: tavilyKey || braveKey },
@@ -1022,13 +1094,13 @@ export default function webSearchExtension(pi: ExtensionAPI) {
           raw: { enabled: true },
         },
       });
-      ctx.ui.notify(`Web Search v3: auto-configured ${provider} (API key from env)`, "info");
+      ctx.ui.notify(`Web Search v3.1: auto-configured ${provider} (API key from env)`, "info");
       return;
     }
 
     // 4. Absolute fallback: DuckDuckGo scraping (zero config needed)
     saveConfig({
-      provider: "duckduckgo",
+      searchProvider: "duckduckgo",
       fallbackChain: ["duckduckgo", "raw"],
       providers: {
         duckduckgo: { enabled: true },
@@ -1036,7 +1108,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
       },
     });
     ctx.ui.notify(
-      "Web Search v3: using DuckDuckGo scraping (free, no API keys). " +
+      "Web Search v3.1: using DuckDuckGo scraping (free, no API keys). " +
       `To switch provider, edit ${CONFIG_PATH}`,
       "info"
     );
