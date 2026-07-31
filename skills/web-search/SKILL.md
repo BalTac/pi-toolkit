@@ -13,9 +13,21 @@ description: >-
 
 # Web Search (Multi-Provider)
 
-This skill uses the `web_search` tool which routes searches through your
-configured search provider. No API keys required for the built-in
-DuckDuckGo scraping — works immediately.
+This skill teaches you how to use the `web_search` tool. Depending on your
+environment, `web_search` is provided by one of these extensions:
+
+- **[pi-web-access](https://github.com/nicobailon/pi-web-access)** (recommended) —
+  OpenAI, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily,
+  SERPdive, SearXNG, Exa, Perplexity, Gemini, AnySearch. Supports multi-query,
+  interactive browser curation, AI auto-summary, source checking, and content
+  fetching. Install with: `pi install git:github.com/nicobailon/pi-web-access`
+
+- **pi-toolkit built-in** (fallback) — SearxNG, Tavily, Brave, DuckDuckGo,
+  raw scraping. Zero npm deps, auto-detects provider. Disabled by default when
+  pi-web-access is installed to avoid tool-name conflicts.
+
+Both extensions share `~/.pi/agent/web-search/config.json`.
+No API keys required for DuckDuckGo scraping — works immediately.
 
 ## Available Providers
 

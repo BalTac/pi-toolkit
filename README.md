@@ -8,9 +8,9 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 
 | Tool | What it does | Needs API key? |
 |------|-------------|----------------|
-| **`web_search`** | Multi-provider web search: SearxNG, Tavily, Brave, DuckDuckGo, raw scraping. Auto-detects the best available provider on startup. | Optional — DuckDuckGo and raw scraping work out of the box with zero keys. |
 | **`web_fetch`** | Fetches any URL and returns clean Markdown with metadata. Uses Mozilla Readability (Firefox Reader View), Turndown, and Metascraper for OpenGraph/Twitter Cards/JSON-LD. Handles HTML, JSON, XML, RSS/Atom. | No — pure HTTP, zero external services. |
 | **`subagent-setup`** | Interactive wizard that detects missing subagent models and helps you reconfigure them via pi's UI — no manual JSON editing. | No |
+| **`web_search`** (opt-in) | Multi-provider web search: SearxNG, Tavily, Brave, DuckDuckGo, raw scraping. Auto-detects the best available provider on startup. **Disabled by default** — see [Web Search Options](#web-search-options) below. | Optional — DuckDuckGo and raw scraping work out of the box with zero keys. |
 
 ### Skills (on-demand guidance for the LLM)
 
@@ -38,9 +38,12 @@ pi install git:github.com/BalTac/pi-toolkit
 ### 2. Install community dependencies
 
 ```bash
-pi install npm:pi-subagents     # subagent delegation + contact_supervisor
-pi install npm:pi-intercom      # cross-session messaging (optional)
+pi install npm:pi-subagents                    # subagent delegation + contact_supervisor
+pi install npm:pi-intercom                     # cross-session messaging (optional, recommended)
+pi install git:github.com/nicobailon/pi-web-access  # web search + content fetching (recommended)
 ```
+
+> **Why `pi-web-access`?** This toolkit's built-in `web_search` is deliberately **disabled by default** to avoid tool-name conflicts. Instead, we recommend [`pi-web-access`](https://github.com/nicobailon/pi-web-access) by Nico Bailon — a vastly more capable web search extension. See [Web Search Options](#web-search-options) for the full rationale.
 
 ### 3. Configure models for subagents
 
@@ -65,11 +68,77 @@ Model config lives in `~/.pi/agent/settings.json` under `subagents`:
 }
 ```
 
-### 4. Configure web search provider
+### 4. Reload pi
+
+```
+/reload
+```
+
+---
+
+## Web Search Options
+
+This toolkit includes a `web_search` extension (`./extensions/web-search.ts`) that is **disabled by default**. This is by design — the extension is kept as a lightweight fallback for environments where `pi-web-access` cannot be installed.
+
+### Recommended: `pi-web-access` (Nico Bailon)
+
+```
+pi install git:github.com/nicobailon/pi-web-access
+```
+
+| Feature | pi-toolkit built-in | pi-web-access |
+|---------|---------------------|---------------|
+| **Providers** | SearxNG, Tavily, Brave, DuckDuckGo, Raw | OpenAI, Brave, Parallel, TinyFish, Search1API, Searchinfinity, Querit, Tavily, SERPdive, SearXNG, Exa, Perplexity, Gemini, AnySearch |
+| **Multi-query** | ❌ Single query | ✅ Up to 8 queries with varied angles per search |
+| **Interactive curator** | ❌ | ✅ Browser UI for reviewing/approving/culling results |
+| **Auto-summary** | ❌ | ✅ AI-generated synthesis with model choice |
+| **Source check** | ❌ | ✅ Verify claims against sources with passage citations |
+| **Content fetching** | ❌ | ✅ `fetch_content` + `get_search_content` for full page extraction |
+| **YouTube / video** | ❌ | ✅ Transcripts, frame extraction, AI video understanding |
+| **GitHub repos** | ❌ | ✅ Clone + read repository contents |
+| **PDF extraction** | ❌ | ✅ Extract text from PDF URLs |
+| **Dependencies** | Zero | ~6 npm packages (auto-installed) |
+
+**Why disable the built-in?** Both `pi-web-access` and this toolkit register a tool named `web_search`. Pi cannot load two extensions that register the same tool name — the second one fails with a conflict error and pi refuses to start. By disabling `web_search` in pi-toolkit, we let `pi-web-access` own that tool name and you get all its advanced features without conflicts.
+
+### Fallback: enable the built-in `web_search`
+
+If you cannot install `pi-web-access` (e.g. restricted environment, no npm), enable the built-in search:
+
+1. Edit `~/.pi/agent/git/github.com/BalTac/pi-toolkit/package.json`
+2. Add `"./extensions/web-search.ts"` back to the `pi.extensions` array:
+
+```json
+"pi": {
+  "extensions": [
+    "./extensions/web-search.ts",
+    "./extensions/subagent-setup.ts",
+    "./extensions/web-fetch"
+  ]
+}
+```
+
+3. `/reload`
+
+The built-in search will auto-detect a provider on startup (SearxNG, Tavily, Brave) or fall back to DuckDuckGo scraping — zero API keys required.
+
+### How the agent handles this at install time
+
+When an AI agent is instructed to set up pi with this toolkit, it should:
+
+1. Install `pi-web-access` **alongside** pi-toolkit (step 2 of Quick install)
+2. **Do NOT** add `"./extensions/web-search.ts"` to the extensions array — it's already disabled
+3. Only if `pi-web-access` installation fails, add the built-in `web_search` as a fallback
+
+The `web-search` **skill** (`.md` instructions) works regardless of which extension provides the tool — it teaches search strategies, not provider specifics.
+
+---
+
+## Web Search Configuration (built-in, when enabled)
 
 **Zero-config:** DuckDuckGo scraping works immediately — no setup needed.
 
-**For better results,** Web Search auto-detects on startup:
+**For better results,** the built-in web search auto-detects on startup:
 
 1. Checks the `SEARXNG_URL` environment variable
 2. Probes `localhost:8080`, `localhost:8888`, and `127.0.0.1:8080` for a SearxNG instance
@@ -94,13 +163,9 @@ If you want to change the provider later, edit `~/.pi/agent/web-search/config.js
 
 The `$VAR` syntax resolves environment variables at runtime.
 
-### 5. Reload pi
+> **Note:** `pi-web-access` uses the same config file (`~/.pi/agent/web-search/config.json`) with additional options. If both are installed (with the built-in enabled), they share the same config but the tool-name conflict will prevent pi from starting. Always keep only one `web_search` tool active.
 
-```
-/reload
-```
-
-## Fallback chain (web search)
+## Fallback chain (built-in search)
 
 If the primary search provider fails, the next one in the chain is tried automatically:
 
@@ -155,7 +220,8 @@ subagent delegation at each step.
 
 | What | Portable? | Notes |
 |------|-----------|-------|
-| `web_search` | ✅ | Auto-detects provider. DuckDuckGo + raw work anywhere. |
+| `web_search` (built-in) | ✅ | Auto-detects provider. DuckDuckGo + raw work anywhere. |
+| `web_search` (pi-web-access) | ⚠️ | Requires npm deps. More providers but needs install. |
 | `web_fetch` | ✅ | Pure JS, no external services. |
 | `subagent-setup` | ✅ | Interactive wizard adapts models to any environment. |
 | `loop` skill | ✅ | Bash required (pi requires it on all OS). |
@@ -167,7 +233,8 @@ subagent delegation at each step.
 
 - [pi coding agent](https://github.com/earendil-works/pi) (any supported OS)
 - [pi-subagents](https://github.com/nicobailon/pi-subagents) (`pi install npm:pi-subagents`)
-- [pi-intercom](https://github.com/nicobailon/pi-intercom) (optional, `pi install npm:pi-intercom`)
+- [pi-intercom](https://github.com/nicobailon/pi-intercom) (optional, recommended, `pi install npm:pi-intercom`)
+- [pi-web-access](https://github.com/nicobailon/pi-web-access) (recommended for web search, `pi install git:github.com/nicobailon/pi-web-access`)
 - `web_fetch` npm deps (jsdom, @mozilla/readability, turndown, metascraper — auto-installed by `pi install`)
 
 ## Conflict handling
@@ -188,24 +255,15 @@ mv ~/.pi/agent/skills/web-search ~/.pi/agent/skills/web-search-old
 
 Then `/reload`.
 
-### Compatibility with pi-web-access
+### Same-name tools (`web_search`)
 
-This toolkit and [`pi-web-access`](https://github.com/nicobailon/pi-web-access) both provide web search capabilities:
+Only **one** extension can register a tool with a given name. If two extensions register the same tool name, pi fails to start with:
 
-| Tool | pi-toolkit | pi-web-access |
-|------|-----------|---------------|
-| `web_search` | ✅ Multi-provider (SearxNG, Tavily, Brave, DDG) | ✅ Multi-provider (OpenAI, Brave, Tavily, SearXNG, etc.) |
-| `web_fetch` | ✅ Readability + Turndown + Metascraper | — |
-| `fetch_content` | — | ✅ Fetch with extraction |
-| `get_search_content` | — | ✅ Content from search results |
+```
+Error: Failed to load extension "...": Tool "web_search" conflicts with ...
+```
 
-**`web_search` name overlap:** both packages register `web_search`. pi resolves conflicts by priority — the first loaded wins. If you need pi-web-access's version, ensure it loads before pi-toolkit (list it first in `packages`).
-
-**When both are installed**, you get the best of both:
-- `web_search` (from whichever loads first)
-- `web_fetch` (from pi-toolkit)
-
-**Recommendation:** Skip pi-web-access. This toolkit's `web_search` + `web_fetch` cover the same functionality, and installing both causes a tool name conflict on `web_search`. The custom `researcher` agent included here uses these tools natively.
+This toolkit's `web_search` extension is **disabled by default** to prevent this conflict with [`pi-web-access`](https://github.com/nicobailon/pi-web-access). If you only use pi-toolkit (without pi-web-access), you can safely enable the built-in `web_search` by adding it to `pi.extensions` in `package.json`.
 
 ## License
 
