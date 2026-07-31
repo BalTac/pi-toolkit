@@ -8,7 +8,8 @@
     "extensions": [
       "./extensions/web-search.ts",
       "./extensions/subagent-setup.ts",
-      "./extensions/web-fetch"
+      "./extensions/web-fetch",
+      "./extensions/deepseek-balance"
     ],
     "skills": [
       "./skills/web-search",
