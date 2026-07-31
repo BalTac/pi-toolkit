@@ -22,9 +22,9 @@ environment, `web_search` is provided by one of these extensions:
   interactive browser curation, AI auto-summary, source checking, and content
   fetching. Install with: `pi install git:github.com/nicobailon/pi-web-access`
 
-- **pi-toolkit built-in** (fallback) — SearxNG, Tavily, Brave, DuckDuckGo,
-  raw scraping. Zero npm deps, auto-detects provider. Disabled by default when
-  pi-web-access is installed to avoid tool-name conflicts.
+- **pi-toolkit built-in** (always available) — SearxNG, Tavily, Brave, DuckDuckGo,
+  raw scraping. Zero npm deps, auto-detects provider. Automatically yields to
+  pi-web-access at runtime if both are installed — no conflicts, no crashes.
 
 ---
 

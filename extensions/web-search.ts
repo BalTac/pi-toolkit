@@ -681,7 +681,11 @@ function cacheKey(params: SearchParams): string {
 // ── Extension ───────────────────────────────────────────────────────────
 
 export default function webSearchExtension(pi: ExtensionAPI) {
-  pi.registerTool({
+  // ── Conflict detection ───────────────────────────────────────
+  // If another extension (e.g. pi-web-access) already registered
+  // "web_search", skip registration silently instead of crashing.
+  try {
+    pi.registerTool({
     name: "web_search",
     label: "Web Search",
     description:
@@ -689,7 +693,7 @@ export default function webSearchExtension(pi: ExtensionAPI) {
       "DuckDuckGo, or raw scraping). Returns titles, URLs, and snippets. " +
       "Supports language filtering, time range, safe search, and pagination. " +
       "No API key needed for DuckDuckGo/raw — works out of the box. " +
-      "Configure provider via ~/.pi/agent/web-search/config.json.",
+      "Configure provider via ~/.pi/web-search.json.",
 
     promptSnippet:
       "Search the web — returns titles, URLs, and snippets from configured provider",
@@ -988,7 +992,22 @@ export default function webSearchExtension(pi: ExtensionAPI) {
         },
       };
     },
-  });
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("conflicts with") || msg.includes("already registered")) {
+      console.error(
+        `[pi-toolkit] web_search NOT registered: another extension already owns this tool.\n` +
+        `  This is expected if pi-web-access is installed — it provides a more capable web_search.\n` +
+        `  To use pi-toolkit's web_search instead, uninstall pi-web-access:\n` +
+        `    pi uninstall git:github.com/nicobailon/pi-web-access\n` +
+        `  Then reload pi.`
+      );
+      // Continue without web_search — pi-web-access handles it.
+      return;
+    }
+    throw err;
+  }
 
   // ── Session start: auto-detect / setup wizard ─────────────────────
 

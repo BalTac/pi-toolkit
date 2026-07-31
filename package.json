@@ -6,10 +6,10 @@
   "license": "MIT",
   "pi": {
     "extensions": [
+      "./extensions/web-search.ts",
       "./extensions/subagent-setup.ts",
       "./extensions/web-fetch"
     ],
-    "_comment_web_search": "The built-in ./extensions/web-search.ts is disabled by default. Use pi-web-access (git:github.com/nicobailon/pi-web-access) instead — it is far more capable (multi-provider, curator UI, auto-summary, source check, content fetching). If you do NOT install pi-web-access, add back './extensions/web-search.ts' to the extensions array above for basic search (DuckDuckGo scraping, zero keys).",
     "skills": [
       "./skills/web-search",
       "./skills/web-fetch",
