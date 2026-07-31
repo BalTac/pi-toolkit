@@ -682,8 +682,31 @@ function cacheKey(params: SearchParams): string {
 
 export default function webSearchExtension(pi: ExtensionAPI) {
   // ── Conflict detection ───────────────────────────────────────
-  // If another extension (e.g. pi-web-access) already registered
-  // "web_search", skip registration silently instead of crashing.
+  // If pi-web-access is already installed, skip registration
+  // entirely. pi-web-access provides a superset of this tool.
+  const settingsPath = path.join(os.homedir(), ".pi", "agent", "settings.json");
+  const hasPiWebAccess = (() => {
+    try {
+      if (!fs.existsSync(settingsPath)) return false;
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      const packages: string[] = settings?.packages ?? [];
+      return packages.some((p: string) => p.includes("nicobailon/pi-web-access"));
+    } catch {
+      return false;
+    }
+  })();
+
+  if (hasPiWebAccess) {
+    console.error(
+      `[pi-toolkit] Skipping web_search registration: pi-web-access is installed.\n` +
+      `  pi-web-access provides a more capable web_search (multi-provider, curator UI,\n` +
+      `  auto-summary, source check, content fetching). Using that instead.`
+    );
+    return;
+  }
+
+  // Safety net: if pre-check missed but another extension registered
+  // web_search first, catch the conflict instead of crashing.
   try {
     pi.registerTool({
     name: "web_search",
