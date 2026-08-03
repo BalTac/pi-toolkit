@@ -87,21 +87,30 @@ export default function subagentSetup(pi: ExtensionAPI) {
     // ── Guard: pi-web-access dependency check ─────────────────────
     // pi-web-access is bundled inside pi-toolkit (see package.json).
     // 1. If it is ALSO installed top-level in settings.json, the two
-    //    registrations of web_search will conflict — warn the user.
+    //    registrations of web_search will conflict — warn the user
+    //    with the exact removal command (npm vs git source).
     // 2. If the bundled node_modules copy is missing, warn to reinstall.
+    // 3. Migrate the legacy web-search config (~/.pi/agent/web-search/
+    //    config.json, written by pi-toolkit ≤0.1.x) to the unified
+    //    ~/.pi/web-search.json that pi-web-access reads — the old
+    //    auto-migration lived in the removed web-search.ts extension.
     try {
       const settings = readSettings();
       const packages: (string | { source?: string })[] =
         (settings?.packages as (string | { source?: string })[]) ?? [];
-      const hasTopLevelPWA = packages.some((p) => {
+      const topLevelPWA = packages.find((p) => {
         const src = typeof p === "string" ? p : p.source ?? "";
         return src.includes("pi-web-access");
       });
-      if (hasTopLevelPWA) {
+      if (topLevelPWA) {
+        const src = typeof topLevelPWA === "string" ? topLevelPWA : (topLevelPWA.source ?? "");
+        const removeCmd = src.startsWith("git:") || src.includes("github.com/nicobailon")
+          ? "pi remove git:github.com/nicobailon/pi-web-access"
+          : "pi remove npm:pi-web-access";
         ctx.ui.notify(
           "pi-toolkit: pi-web-access is now bundled inside pi-toolkit. " +
-          "Remove the separate pi-web-access entry from ~/.pi/agent/settings.json " +
-          "packages list (pi remove npm:pi-web-access) to avoid tool-name conflicts.",
+          `A separate install was detected (${src}). Remove it to avoid ` +
+          `duplicate web_search registration: ${removeCmd}`,
           "warning"
         );
       }
@@ -119,6 +128,47 @@ export default function subagentSetup(pi: ExtensionAPI) {
           "Run 'pi update --extensions' to reinstall dependencies.",
           "warning"
         );
+      }
+
+      // Legacy web-search config migration (pi-toolkit ≤0.1.x)
+      const LEGACY_WEBSEARCH_DIR = path.join(os.homedir(), ".pi", "agent", "web-search");
+      const LEGACY_WEBSEARCH_PATH = path.join(LEGACY_WEBSEARCH_DIR, "config.json");
+      const UNIFIED_WEBSEARCH_PATH = path.join(os.homedir(), ".pi", "web-search.json");
+      if (!fs.existsSync(UNIFIED_WEBSEARCH_PATH) && fs.existsSync(LEGACY_WEBSEARCH_PATH)) {
+        try {
+          const legacy = JSON.parse(fs.readFileSync(LEGACY_WEBSEARCH_PATH, "utf-8")) as {
+            provider?: string;
+            fallbackChain?: string[];
+            providers?: Record<string, { baseUrl?: string; apiKey?: string; enabled?: boolean }>;
+          };
+          const unified: Record<string, unknown> = {};
+          if (legacy.provider) unified.searchProvider = legacy.provider;
+          if (legacy.fallbackChain?.length) unified.fallbackChain = legacy.fallbackChain;
+          if (legacy.providers?.searxng?.baseUrl) unified.searxngBaseUrl = legacy.providers.searxng.baseUrl;
+          const otherProviders: Record<string, unknown> = {};
+          if (legacy.providers) {
+            for (const [name, pcfg] of Object.entries(legacy.providers)) {
+              if (name !== "searxng" && pcfg && Object.keys(pcfg).length > 0) {
+                otherProviders[name] = pcfg;
+              }
+            }
+          }
+          if (Object.keys(otherProviders).length > 0) unified.providers = otherProviders;
+          if (Object.keys(unified).length > 0) {
+            fs.mkdirSync(path.dirname(UNIFIED_WEBSEARCH_PATH), { recursive: true });
+            fs.writeFileSync(UNIFIED_WEBSEARCH_PATH, JSON.stringify(unified, null, 2) + "\n", "utf-8");
+            ctx.ui.notify(
+              "pi-toolkit: migrated legacy web-search config to ~/.pi/web-search.json " +
+              "(read by bundled pi-web-access).",
+              "info"
+            );
+          }
+        } catch (err) {
+          ctx.ui.notify(
+            `pi-toolkit: failed to migrate legacy web-search config: ${err instanceof Error ? err.message : String(err)}`,
+            "warning"
+          );
+        }
       }
     } catch { /* non-critical guard — never break startup */ }
 

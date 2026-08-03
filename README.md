@@ -74,6 +74,64 @@ Model config lives in `~/.pi/agent/settings.json` under `subagents`:
 
 ---
 
+## Upgrading from pi-toolkit ≤0.1.x
+
+pi-toolkit 0.2.0 **bundles pi-web-access** and no longer ships its own
+`web_search`/`web_fetch`. The upgrade is automatic in most cases, but read
+this before updating if you installed pi-web-access separately.
+
+### Scenario A — you already installed pi-web-access separately (old README said to)
+
+> ⚠️ **Required step.** pi-toolkit 0.2.0 bundles pi-web-access. If you also
+> have it installed top-level, pi would try to register `web_search` twice
+> and fail on startup.
+
+**Before** updating pi-toolkit, remove the separate install:
+
+```bash
+pi remove npm:pi-web-access
+# or, if you installed it via git:
+pi remove git:github.com/nicobailon/pi-web-access
+```
+
+Then update the toolkit:
+
+```bash
+pi update --extensions
+```
+
+The bundled copy takes over automatically. Your `~/.pi/web-search.json`
+config (API keys, SearxNG URL, provider choice) is **shared** — nothing is lost.
+
+> If you already updated and pi fails to start with a duplicate-tool error,
+> run the `pi remove` command above, then `/reload`. The startup guard in
+> subagent-setup also warns about this and tells you the exact command.
+
+### Scenario B — you only have the legacy web-search config
+
+If you previously used pi-toolkit's built-in web search, your config may
+still live at `~/.pi/agent/web-search/config.json`. pi-web-access only reads
+`~/.pi/web-search.json`.
+
+On the first startup after the update, pi-toolkit **migrates the legacy file
+automatically** (provider → `searchProvider`, `providers.searxng.baseUrl` →
+`searxngBaseUrl`) and notifies you. No manual steps needed.
+
+### Scenario C — you never used pi-toolkit's built-in web search
+
+Nothing to do. The bundled pi-web-access works zero-config (Exa MCP) and
+picks up any keys you add to `~/.pi/web-search.json`.
+
+### Scenario D — you already have pi-subagents / pi-intercom installed
+
+No conflict. pi-toolkit uses them as-is; just update the toolkit:
+
+```bash
+pi update --extensions
+```
+
+---
+
 ## Web access (via bundled pi-web-access)
 
 This toolkit **no longer ships its own `web_search` / `web_fetch`** — they were redundant and conflicted with [pi-web-access](https://github.com/nicobailon/pi-web-access), which is now a **bundled dependency** of pi-toolkit.
