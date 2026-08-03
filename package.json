@@ -1,19 +1,22 @@
 {
   "name": "pi-toolkit",
-  "version": "0.1.0",
-  "description": "Skills, extensions & tools for pi coding agent — web search, web fetch, subagent delegation, autonomous engineering loop",
+  "version": "0.2.0",
+  "description": "Skills, extensions & tools for pi coding agent — subagent delegation, autonomous engineering loop, DeepSeek balance tracker. Requires bundled pi-web-access for web search and content fetching.",
   "author": "BalTac",
   "license": "MIT",
+  "dependencies": {
+    "pi-web-access": "^0.18.0"
+  },
+  "bundledDependencies": [
+    "pi-web-access"
+  ],
   "pi": {
     "extensions": [
-      "./extensions/web-search.ts",
       "./extensions/subagent-setup.ts",
-      "./extensions/web-fetch",
-      "./extensions/deepseek-balance"
+      "./extensions/deepseek-balance",
+      "node_modules/pi-web-access/index.ts"
     ],
     "skills": [
-      "./skills/web-search",
-      "./skills/web-fetch",
       "./skills/subagent",
       "./skills/loop"
     ]

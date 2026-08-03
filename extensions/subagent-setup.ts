@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { fileURLToPath } from "node:url";
 
 const SETTINGS_PATH = path.join(os.homedir(), ".pi", "agent", "settings.json");
 
@@ -82,6 +83,44 @@ function writeSettings(s: Record<string, any>): void {
 export default function subagentSetup(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     if (ctx.mode !== "tui") return; // only interactive
+
+    // ── Guard: pi-web-access dependency check ─────────────────────
+    // pi-web-access is bundled inside pi-toolkit (see package.json).
+    // 1. If it is ALSO installed top-level in settings.json, the two
+    //    registrations of web_search will conflict — warn the user.
+    // 2. If the bundled node_modules copy is missing, warn to reinstall.
+    try {
+      const settings = readSettings();
+      const packages: (string | { source?: string })[] =
+        (settings?.packages as (string | { source?: string })[]) ?? [];
+      const hasTopLevelPWA = packages.some((p) => {
+        const src = typeof p === "string" ? p : p.source ?? "";
+        return src.includes("pi-web-access");
+      });
+      if (hasTopLevelPWA) {
+        ctx.ui.notify(
+          "pi-toolkit: pi-web-access is now bundled inside pi-toolkit. " +
+          "Remove the separate pi-web-access entry from ~/.pi/agent/settings.json " +
+          "packages list (pi remove npm:pi-web-access) to avoid tool-name conflicts.",
+          "warning"
+        );
+      }
+
+      // Bundled copy present? (node_modules/pi-web-access next to this package)
+      const pwaPath = path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "..",
+        "node_modules",
+        "pi-web-access"
+      );
+      if (!fs.existsSync(pwaPath)) {
+        ctx.ui.notify(
+          "pi-toolkit: bundled pi-web-access dependency not found. " +
+          "Run 'pi update --extensions' to reinstall dependencies.",
+          "warning"
+        );
+      }
+    } catch { /* non-critical guard — never break startup */ }
 
     const settings = readSettings();
     if (!settings?.subagents) return; // pi-subagents not configured
