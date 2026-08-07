@@ -1,9 +1,12 @@
 /**
- * DeepSeek Balance Extension v1.0
+ * DeepSeek Balance Extension v1.1
  *
  * Shows DeepSeek credit in the pi status bar:
  *   - Session cost (accumulated from token usage across all messages)
  *   - Remaining total balance (fetched from DeepSeek API: GET /user/balance)
+ *   - Model input/output rate per 1M tokens (from pi's model registry,
+ *     i.e. the same per-model `cost` configured in models-store.json)
+ *     on the same line
  *
  * Auto-activates when the current model provider is "deepseek".
  * Balance is refreshed on session_start, after each turn, on model switch,
@@ -131,14 +134,26 @@ function calcSessionCost(ctx: ExtensionContext): number {
   return total;
 }
 
+function fmtRate(v: number): string {
+  if (v >= 1) return v.toFixed(2);
+  if (v >= 0.01) return v.toFixed(3).replace(/\.?0+$/, "");
+  return v.toFixed(4).replace(/\.?0+$/, "");
+}
+
 function fmtStatus(
   balance: BalanceResponse | null,
   cost: number,
-  theme: { fg: (color: string, text: string) => string },
+  modelCost: { input: number; output: number } | null,
+  theme: { fg: (color: any, text: string) => string },
 ): string {
   const fg = (c: string, t: string) => theme.fg(c, t);
   const parts: string[] = [];
   parts.push(fg("accent", "⚡") + " " + fg("dim", `$${cost.toFixed(3)} session`));
+
+  if (modelCost && (modelCost.input > 0 || modelCost.output > 0)) {
+    parts.push(fg("text", `in $${fmtRate(modelCost.input)}/M`));
+    parts.push(fg("text", `out $${fmtRate(modelCost.output)}/M`));
+  }
 
   if (balance && balance.balance_infos.length > 0) {
     const info = balance.balance_infos[0]!;
@@ -177,7 +192,11 @@ export default function deepseekBalance(pi: ExtensionAPI) {
 
     const cost = calcSessionCost(ctx);
     const balance = await fetchBalance(apiKey, ctx.signal);
-    ctx.ui.setStatus(STATUS_ID, fmtStatus(balance, cost, ctx.ui.theme));
+    const m = ctx.model;
+    const modelCost = m?.cost
+      ? { input: m.cost.input ?? 0, output: m.cost.output ?? 0 }
+      : null;
+    ctx.ui.setStatus(STATUS_ID, fmtStatus(balance, cost, modelCost, ctx.ui.theme));
     active = true;
   }
 

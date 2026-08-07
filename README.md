@@ -10,6 +10,7 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 |------|-------------|----------------|
 | **`subagent-setup`** | Interactive wizard that detects missing subagent models and helps you reconfigure them via pi's UI — no manual JSON editing. | No |
 | **`deepseek-balance`** | Shows DeepSeek credit balance and session cost in pi's status bar. Auto-activates when the current provider is DeepSeek. | Optional — reads key from `~/.pi/agent/auth.json` or `DEEPSEEK_API_KEY` env var |
+| **`model-prices`** | `/pricing` (aliases `/prices`, `/model-prices`): full-screen price comparison of every available model (input/output/cache per 1M tokens from the model registry) with sort by price and instant model switch. `/pricing-report [path]` (aliases `/price-report`, `/pricing-html`): generates a self-contained HTML report with charts by type/category/provider/price bracket, filters and a multi-select comparison picker, then opens it in the browser. | No |
 | **`web_search` / `fetch_content` / `source_check` / `get_search_content`** | Web search, content fetching, claim verification, and content retrieval — provided by the **bundled** [pi-web-access](https://github.com/nicobailon/pi-web-access) (18+ search providers, GitHub cloning, YouTube transcripts, PDF extraction, video analysis). | Zero-config (Exa MCP) or add API keys in `~/.pi/web-search.json` |
 
 ### Skills (on-demand guidance for the LLM)

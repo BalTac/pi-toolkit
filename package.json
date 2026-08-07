@@ -14,6 +14,7 @@
     "extensions": [
       "./extensions/subagent-setup.ts",
       "./extensions/deepseek-balance",
+      "./extensions/model-prices",
       "node_modules/pi-web-access/index.ts"
     ],
     "skills": [
