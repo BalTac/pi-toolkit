@@ -204,6 +204,18 @@ function tierOf(m) {
   return "other";
 }
 
+function peakPeriod(now) {
+  const h = now.getUTCHours();
+  return (h >= 1 && h < 4) || (h >= 6 && h < 10) ? "peak" : "off";
+}
+function updatePeak() {
+  const el = $("peak-status");
+  if (!el) return;
+  const p = peakPeriod(new Date());
+  el.textContent = p === "peak" ? "▲ PEAK hours" : "▼ off-peak hours";
+  el.className = "pill " + (p === "peak" ? "peak" : "off");
+}
+
 function fmtRate(v) {
   if (v === null || v === undefined) return "—";
   if (v === 0) return "0";
@@ -507,6 +519,8 @@ scatter.parentElement.style.position = "relative";
 scatter.parentElement.appendChild(tip);
 
 $("meta-date").textContent = new Date().toLocaleString();
+updatePeak();
+setInterval(updatePeak, 30000);
 initProviders();
 refresh();
 </script>

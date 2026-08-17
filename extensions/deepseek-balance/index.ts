@@ -1,5 +1,5 @@
 /**
- * DeepSeek Balance Extension v1.1
+ * DeepSeek Balance Extension v1.2
  *
  * Shows DeepSeek credit in the pi status bar:
  *   - Session cost (accumulated from token usage across all messages)
@@ -7,6 +7,8 @@
  *   - Model input/output rate per 1M tokens (from pi's model registry,
  *     i.e. the same per-model `cost` configured in models-store.json)
  *     on the same line
+ *   - Peak/off-peak indicator for DeepSeek V4 models (peak hours:
+ *     01:00-04:00 and 06:00-10:00 UTC, off-peak = half price)
  *
  * Auto-activates when the current model provider is "deepseek".
  * Balance is refreshed on session_start, after each turn, on model switch,
@@ -124,6 +126,16 @@ function isDeepSeek(ctx: ExtensionContext): boolean {
   return ctx.model?.provider === "deepseek";
 }
 
+// ── Peak / off-peak ────────────────────────────────────────────────────
+// DeepSeek V4 peak hours: 01:00-04:00 and 06:00-10:00 UTC.
+// All other hours are off-peak, priced at half the peak rate.
+const PEAK_MODEL_RE = /^deepseek-v4/;
+
+function peakPeriod(now: Date = new Date()): "peak" | "off" {
+  const h = now.getUTCHours();
+  return (h >= 1 && h < 4) || (h >= 6 && h < 10) ? "peak" : "off";
+}
+
 function calcSessionCost(ctx: ExtensionContext): number {
   let total = 0;
   for (const e of ctx.sessionManager.getBranch()) {
@@ -144,6 +156,7 @@ function fmtStatus(
   balance: BalanceResponse | null,
   cost: number,
   modelCost: { input: number; output: number } | null,
+  period: "peak" | "off" | null,
   theme: { fg: (color: any, text: string) => string },
 ): string {
   const fg = (c: string, t: string) => theme.fg(c, t);
@@ -153,6 +166,12 @@ function fmtStatus(
   if (modelCost && (modelCost.input > 0 || modelCost.output > 0)) {
     parts.push(fg("text", `in $${fmtRate(modelCost.input)}/M`));
     parts.push(fg("text", `out $${fmtRate(modelCost.output)}/M`));
+  }
+
+  if (period === "peak") {
+    parts.push(fg("warning", "▲ peak"));
+  } else if (period === "off") {
+    parts.push(fg("success", "▼ off-peak"));
   }
 
   if (balance && balance.balance_infos.length > 0) {
@@ -196,7 +215,8 @@ export default function deepseekBalance(pi: ExtensionAPI) {
     const modelCost = m?.cost
       ? { input: m.cost.input ?? 0, output: m.cost.output ?? 0 }
       : null;
-    ctx.ui.setStatus(STATUS_ID, fmtStatus(balance, cost, modelCost, ctx.ui.theme));
+    const period = m && PEAK_MODEL_RE.test(m.id) ? peakPeriod() : null;
+    ctx.ui.setStatus(STATUS_ID, fmtStatus(balance, cost, modelCost, period, ctx.ui.theme));
     active = true;
   }
 

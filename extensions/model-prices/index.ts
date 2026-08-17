@@ -47,6 +47,14 @@ type Done = (model: ModelLike | null) => void;
 
 type SortMode = "name" | "in" | "out";
 
+// DeepSeek V4 peak hours: 01:00-04:00 and 06:00-10:00 UTC (off-peak = half price).
+const PEAK_MODEL_RE = /^deepseek-v4/;
+
+function peakPeriod(now: Date = new Date()): "peak" | "off" {
+  const h = now.getUTCHours();
+  return (h >= 1 && h < 4) || (h >= 6 && h < 10) ? "peak" : "off";
+}
+
 // ── Formatting helpers ──────────────────────────────────────────────────
 
 function fmtRate(v: number | undefined): string | null {
@@ -107,6 +115,7 @@ class PricePicker {
 
   private scope: "all" | "scoped";
   private sort: SortMode = "name";
+  private period: "peak" | "off" | null;
   private models: ModelLike[] = [];
   private selectedIndex = 0;
 
@@ -127,6 +136,7 @@ class PricePicker {
     this.theme = theme;
     this.kb = kb;
     this.done = done;
+    this.period = all.some((m) => PEAK_MODEL_RE.test(m.id)) ? peakPeriod() : null;
     this.scope = scoped.length > 0 ? "scoped" : "all";
     this.rebuild();
   }
@@ -184,11 +194,17 @@ class PricePicker {
 
     const sortLabel = this.sort === "name" ? "name" : this.sort === "in" ? "input price" : "output price";
     const scopeLabel = this.scope === "scoped" && this.scoped.length > 0 ? "scoped" : "all";
+    const peakBadge =
+      this.period === "peak"
+        ? fg("warning", "▲ peak")
+        : this.period === "off"
+          ? fg("success", "▼ off-peak")
+          : "";
 
     const header = truncateToWidth(
       `${fg("accent", "Model prices")} ${dim(`· ${this.models.length} models`)} ${dim(
         `· sort: ${sortLabel} (p)`,
-      )} ${dim(`· scope: ${scopeLabel}`)} ${dim("(tab)")}`,
+      )} ${dim(`· scope: ${scopeLabel}`)} ${dim("(tab)")}${peakBadge ? ` ${peakBadge}` : ""}`,
       width,
       dim("..."),
     );
