@@ -12,7 +12,6 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { fileURLToPath } from "node:url";
 
 const SETTINGS_PATH = path.join(os.homedir(), ".pi", "agent", "settings.json");
 
@@ -84,52 +83,14 @@ export default function subagentSetup(pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     if (ctx.mode !== "tui") return; // only interactive
 
-    // ── Guard: pi-web-access dependency check ─────────────────────
-    // pi-web-access is bundled inside pi-toolkit (see package.json).
-    // 1. If it is ALSO installed top-level in settings.json, the two
-    //    registrations of web_search will conflict — warn the user
-    //    with the exact removal command (npm vs git source).
-    // 2. If the bundled node_modules copy is missing, warn to reinstall.
-    // 3. Migrate the legacy web-search config (~/.pi/agent/web-search/
-    //    config.json, written by pi-toolkit ≤0.1.x) to the unified
-    //    ~/.pi/web-search.json that pi-web-access reads — the old
-    //    auto-migration lived in the removed web-search.ts extension.
+    // ── Guard: legacy web-search config migration ──────────────────
+    // pi-toolkit ships no third-party packages. Missing required/recommended
+    // companions (pi-web-access, pi-subagents, pi-intercom, pi-usage,
+    // pi-agent-budget) are reported by extensions/install-guide.ts. Here we
+    // only migrate the legacy web-search config (~/.pi/agent/web-search/
+    // config.json, written by pi-toolkit ≤0.1.x) to the unified
+    // ~/.pi/web-search.json that pi-web-access reads.
     try {
-      const settings = readSettings();
-      const packages: (string | { source?: string })[] =
-        (settings?.packages as (string | { source?: string })[]) ?? [];
-      const topLevelPWA = packages.find((p) => {
-        const src = typeof p === "string" ? p : p.source ?? "";
-        return src.includes("pi-web-access");
-      });
-      if (topLevelPWA) {
-        const src = typeof topLevelPWA === "string" ? topLevelPWA : (topLevelPWA.source ?? "");
-        const removeCmd = src.startsWith("git:") || src.includes("github.com/nicobailon")
-          ? "pi remove git:github.com/nicobailon/pi-web-access"
-          : "pi remove npm:pi-web-access";
-        ctx.ui.notify(
-          "pi-toolkit: pi-web-access is now bundled inside pi-toolkit. " +
-          `A separate install was detected (${src}). Remove it to avoid ` +
-          `duplicate web_search registration: ${removeCmd}`,
-          "warning"
-        );
-      }
-
-      // Bundled copy present? (node_modules/pi-web-access next to this package)
-      const pwaPath = path.join(
-        path.dirname(fileURLToPath(import.meta.url)),
-        "..",
-        "node_modules",
-        "pi-web-access"
-      );
-      if (!fs.existsSync(pwaPath)) {
-        ctx.ui.notify(
-          "pi-toolkit: bundled pi-web-access dependency not found. " +
-          "Run 'pi update --extensions' to reinstall dependencies.",
-          "warning"
-        );
-      }
-
       // Legacy web-search config migration (pi-toolkit ≤0.1.x)
       const LEGACY_WEBSEARCH_DIR = path.join(os.homedir(), ".pi", "agent", "web-search");
       const LEGACY_WEBSEARCH_PATH = path.join(LEGACY_WEBSEARCH_DIR, "config.json");

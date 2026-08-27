@@ -2,16 +2,23 @@
 
 Skills, extensions, and tools for the [pi coding agent](https://github.com/earendil-works/pi).
 
+> **pi-toolkit ships no third-party pi packages.** Required and recommended
+> companion packages are installed separately. After you install (or update)
+> pi-toolkit, a **post-install notification** tells you which companions are
+> missing and how to install them: turn to `/pi-toolkit-deps` (a command) or
+> `pi_toolkit_install_guide` (a tool). See [Quick install](#quick-install).
+
 ## What's inside
 
 ### Extensions (tools callable by the LLM)
 
 | Tool | What it does | Needs API key? |
 |------|-------------|----------------|
+| **`install-guide`** | On session_start, checks the required/recommended companion packages and toasts any missing ones. Registers `/pi-toolkit-deps` and the `pi_toolkit_install_guide` tool so the LLM sees the install commands. | No |
 | **`subagent-setup`** | Interactive wizard that detects missing subagent models and helps you reconfigure them via pi's UI — no manual JSON editing. | No |
 | **`deepseek-balance`** | Shows DeepSeek credit balance and session cost in pi's status bar, with model in/out rates per 1M and a live peak/off-peak badge for DeepSeek V4 (peak 01:00–04:00 & 06:00–10:00 UTC, off-peak = half price). Auto-activates when the current provider is DeepSeek. | Optional — reads key from `~/.pi/agent/auth.json` or `DEEPSEEK_API_KEY` env var |
 | **`model-prices`** | `/pricing` (aliases `/prices`, `/model-prices`): full-screen price comparison of every available model (input/output/cache per 1M tokens from the model registry) with sort by price, peak/off-peak badge for DeepSeek V4, and instant model switch. `/pricing-report [path]` (aliases `/price-report`, `/pricing-html`): generates a self-contained HTML report with charts by type/category/provider/price bracket, filters, live peak/off-peak badge and a multi-select comparison picker, then opens it in the browser. | No |
-| **`web_search` / `fetch_content` / `source_check` / `get_search_content`** | Web search, content fetching, claim verification, and content retrieval — provided by the **bundled** [pi-web-access](https://github.com/nicobailon/pi-web-access) (18+ search providers, GitHub cloning, YouTube transcripts, PDF extraction, video analysis). | Zero-config (Exa MCP) or add API keys in `~/.pi/web-search.json` |
+| **`web_search` / `fetch_content` / `source_check` / `get_search_content`** | Web search, content fetching, claim verification, and content retrieval — provided by [pi-web-access](https://github.com/nicobailon/pi-web-access) (a **required** companion; 18+ search providers, GitHub cloning, YouTube transcripts, PDF extraction, video analysis). | Zero-config (Exa MCP) or add keys in `~/.pi/web-search.json` |
 
 ### Skills (on-demand guidance for the LLM)
 
@@ -35,13 +42,21 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 pi install git:github.com/BalTac/pi-toolkit
 ```
 
-**pi-web-access is bundled** — no separate install needed; pi installs it automatically with the toolkit.
+pi-toolkit bundles **nothing** — it only adds its own extensions, skills, and
+agents. It does **not** pull in companion packages automatically.
 
-### 2. Install pi-subagents (required) and pi-intercom (recommended)
+### 2. Install required & recommended companions
+
+Run each `pi install` below. If you miss any, pi-toolkit will tell you: a
+post-install toast appears on startup, `/pi-toolkit-deps` re-lists them, and
+the `pi_toolkit_install_guide` tool gives the LLM the same list.
 
 ```bash
-pi install npm:pi-subagents                    # subagent delegation + contact_supervisor
-pi install npm:pi-intercom                     # cross-session messaging (optional, recommended)
+pi install npm:pi-web-access                 # REQUIRED — web search / content fetching
+pi install npm:pi-subagents                  # REQUIRED — subagent delegation + contact_supervisor
+pi install npm:pi-intercom                   # recommended — cross-session messaging
+pi install npm:@narumitw/pi-usage             # recommended — provider usage / credit dashboard (/usage)
+pi install npm:pi-agent-budget               # recommended — cost / budget tracking (/budget)
 ```
 
 ### 3. Configure models for subagents
@@ -75,69 +90,42 @@ Model config lives in `~/.pi/agent/settings.json` under `subagents`:
 
 ---
 
-## Upgrading from pi-toolkit ≤0.1.x
+## Upgrading pi-toolkit
 
-pi-toolkit 0.2.0 **bundles pi-web-access** and no longer ships its own
-`web_search`/`web_fetch`. The upgrade is automatic in most cases, but read
-this before updating if you installed pi-web-access separately.
-
-### Scenario A — you already installed pi-web-access separately (old README said to)
-
-> ⚠️ **Required step.** pi-toolkit 0.2.0 bundles pi-web-access. If you also
-> have it installed top-level, pi would try to register `web_search` twice
-> and fail on startup.
-
-**Before** updating pi-toolkit, remove the separate install:
-
-```bash
-pi remove npm:pi-web-access
-# or, if you installed it via git:
-pi remove git:github.com/nicobailon/pi-web-access
-```
-
-Then update the toolkit:
+Just update the toolkit; there are no bundled packages to remove or reconcile:
 
 ```bash
 pi update --extensions
 ```
 
-The bundled copy takes over automatically. Your `~/.pi/web-search.json`
-config (API keys, SearxNG URL, provider choice) is **shared** — nothing is lost.
+Because pi-toolkit bundles nothing, updating it never leaves stale bundled
+packages behind. If a previous version of pi-toolkit bundled pi-web-access,
+updating to this version **prunes it automatically** from pi-toolkit's own
+`node_modules` (pi re-runs `npm install` on reconcile) — the toolkit simply
+stops shipping it. If you rely on `web_search`/`fetch`, make sure the
+`pi-web-access` **required companion** is installed separately (see
+[Quick install](#quick-install)).
 
-> If you already updated and pi fails to start with a duplicate-tool error,
-> run the `pi remove` command above, then `/reload`. The startup guard in
-> subagent-setup also warns about this and tells you the exact command.
-
-### Scenario B — you only have the legacy web-search config
-
-If you previously used pi-toolkit's built-in web search, your config may
-still live at `~/.pi/agent/web-search/config.json`. pi-web-access only reads
-`~/.pi/web-search.json`.
-
-On the first startup after the update, pi-toolkit **migrates the legacy file
-automatically** (provider → `searchProvider`, `providers.searxng.baseUrl` →
-`searxngBaseUrl`) and notifies you. No manual steps needed.
-
-### Scenario C — you never used pi-toolkit's built-in web search
-
-Nothing to do. The bundled pi-web-access works zero-config (Exa MCP) and
-picks up any keys you add to `~/.pi/web-search.json`.
-
-### Scenario D — you already have pi-subagents / pi-intercom installed
-
-No conflict. pi-toolkit uses them as-is; just update the toolkit:
-
-```bash
-pi update --extensions
-```
+> **Legacy config migration:** if you previously used pi-toolkit's built-in
+> web search, your old config may still live at
+> `~/.pi/agent/web-search/config.json`. pi-web-access reads
+> `~/.pi/web-search.json`. On the first startup after updating, pi-toolkit
+> migrates the legacy file automatically (provider → `searchProvider`,
+> `providers.searxng.baseUrl` → `searxngBaseUrl`) and notifies you.
 
 ---
 
-## Web access (via bundled pi-web-access)
+## Web access (pi-web-access — required companion)
 
-This toolkit **no longer ships its own `web_search` / `web_fetch`** — they were redundant and conflicted with [pi-web-access](https://github.com/nicobailon/pi-web-access), which is now a **bundled dependency** of pi-toolkit.
+`web_search` / `fetch_content` / `source_check` / `get_search_content` come
+from [pi-web-access](https://github.com/nicobailon/pi-web-access), installed
+separately as a **required companion**:
 
-Web tools registered by the bundled extension:
+```bash
+pi install npm:pi-web-access
+```
+
+Web tools registered by pi-web-access:
 
 | Tool | What it does |
 |------|-------------|
@@ -155,7 +143,7 @@ Available agents after installing `pi-subagents` (plus the custom `researcher` a
 | Agent | Tier | Purpose |
 |-------|------|---------|
 | `scout` | light | Fast local codebase recon → compressed findings |
-| `researcher` | light | Web/docs research with cited sources (custom — uses bundled pi-web-access) |
+| `researcher` | light | Web/docs research with cited sources (custom — uses pi-web-access) |
 | `analyst` | light | Read-only measurements and reports (custom) |
 | `delegate` | light | General-purpose child close to parent behavior |
 | `planner` | powerful | Concrete implementation plans (read-only) |
@@ -193,8 +181,8 @@ subagent delegation at each step.
 
 | What | Portable? | Notes |
 |------|-----------|-------|
-| `web_search` / `fetch_content` (pi-web-access, bundled) | ⚠️ | Requires npm deps — auto-installed by pi on install/reconcile. |
-| `subagent-setup` | ✅ | Interactive wizard adapts models to any environment. |
+| `web_search` / `fetch_content` (pi-web-access, required companion) | ⚠️ | Requires npm deps — auto-installed by pi when you `pi install npm:pi-web-access`. |
+| `install-guide` / `subagent-setup` | ✅ | Instant notifications + interactive wizard. |
 | `deepseek-balance` | ✅ | Reads key from auth.json or env var. |
 | `loop` skill | ✅ | Bash required (pi requires it on all OS). |
 | Skills (.md files) | ✅ | Plain text, no OS dependencies. |
@@ -203,9 +191,13 @@ subagent delegation at each step.
 ## Requirements
 
 - [pi coding agent](https://github.com/earendil-works/pi) (v0.37.3+)
-- [pi-subagents](https://github.com/nicobailon/pi-subagents) (`pi install npm:pi-subagents`)
-- [pi-intercom](https://github.com/nicobailon/pi-intercom) (optional, recommended, `pi install npm:pi-intercom`)
-- **pi-web-access** — bundled inside pi-toolkit as a dependency. No separate install needed; npm deps are auto-installed by pi on install/reconcile.
+- **Required** companions:
+  - [pi-web-access](https://github.com/nicobailon/pi-web-access) (`pi install npm:pi-web-access`) — web search / content fetching
+  - [pi-subagents](https://github.com/nicobailon/pi-subagents) (`pi install npm:pi-subagents`) — subagent delegation
+- **Recommended** companions:
+  - [pi-intercom](https://github.com/nicobailon/pi-intercom) (`pi install npm:pi-intercom`) — cross-session messaging
+  - [pi-usage](https://github.com/narumiruna/pi-extensions) (`pi install npm:@narumitw/pi-usage`) — provider usage/credit dashboard
+  - [pi-agent-budget](https://github.com/nicobailon/pi-agent-budget) (`pi install npm:pi-agent-budget`) — cost/budget tracking
 
 ## Conflict handling
 
@@ -227,15 +219,10 @@ Then `/reload`.
 
 ### Same-name tools (`web_search`)
 
-pi-toolkit bundles pi-web-access, which registers `web_search`, `fetch_content`, `source_check`, and `get_search_content`. Do **not** install pi-web-access separately — doing so would register the same tools twice and pi would fail on startup.
-
-A startup guard (in `subagent-setup`) warns if a separate pi-web-access installation is detected in `~/.pi/agent/settings.json`. Remove it with:
-
-```bash
-pi remove npm:pi-web-access
-# or
-pi remove git:github.com/nicobailon/pi-web-access
-```
+`web_search`, `fetch_content`, `source_check`, and `get_search_content` come
+from the **pi-web-access** companion. Install it **once** (`pi install
+npm:pi-web-access`). Do not install it a second way — e.g. both top-level and
+bundled inside an older pi-toolkit — or the tools would be registered twice.
 
 ## License
 
