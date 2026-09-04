@@ -63,6 +63,12 @@ const COMPANIONS: Companion[] = [
     kind: "recommended",
     note: "cost / budget tracking (/budget)",
   },
+  {
+    source: "npm:pi-ssh-remote",
+    name: "pi-ssh-remote",
+    kind: "recommended",
+    note: "persistent remote SSH workspaces (remote tool / /remote)",
+  },
 ];
 
 function normalizeSource(spec: string): string {
