@@ -2,9 +2,9 @@
  * pi-toolkit Post-Install Guide
  *
  * pi-toolkit ships NO third-party pi packages. Required and recommended
- * companion packages (web access, subagents, intercom, usage, budget) must
- * be installed separately. This extension surfaces them so nothing is
- * silently missing:
+ * companion packages (web access, subagents, intercom, usage, budget, remote
+ * SSH, knowledge base) must be installed separately. This extension surfaces
+ * them so nothing is silently missing:
  *
  *   - On session_start (TUI), a toast lists any missing companions.
  *   - A tool (`pi_toolkit_install_guide`) returns the same list with the
@@ -68,6 +68,12 @@ const COMPANIONS: Companion[] = [
     name: "pi-ssh-remote",
     kind: "recommended",
     note: "persistent remote SSH workspaces (remote tool / /remote)",
+  },
+  {
+    source: "npm:@zosmaai/pi-llm-wiki",
+    name: "pi-llm-wiki",
+    kind: "recommended",
+    note: "Karpathy LLM-wiki knowledge base: compounding project + personal vault, lint and recall (/wiki-init, /wiki-ingest, wiki_lint)",
   },
 ];
 

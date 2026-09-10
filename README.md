@@ -59,6 +59,8 @@ pi install npm:pi-subagents                  # REQUIRED — subagent delegation 
 pi install npm:pi-intercom                   # recommended — cross-session messaging
 pi install npm:@narumitw/pi-usage             # recommended — provider usage / credit dashboard (/usage)
 pi install npm:pi-agent-budget               # recommended — cost / budget tracking (/budget)
+pi install npm:pi-ssh-remote                 # recommended — persistent remote SSH workspaces (/remote)
+pi install npm:@zosmaai/pi-llm-wiki          # recommended — Karpathy LLM-wiki knowledge base (/wiki-init, /wiki-ingest, wiki_lint)
 ```
 
 ### 3. Configure models for subagents
@@ -229,6 +231,8 @@ Pairs well with the `loop` skill and with `subagent` delegation (a goal step can
   - [pi-intercom](https://github.com/nicobailon/pi-intercom) (`pi install npm:pi-intercom`) — cross-session messaging
   - [pi-usage](https://github.com/narumiruna/pi-extensions) (`pi install npm:@narumitw/pi-usage`) — provider usage/credit dashboard
   - [pi-agent-budget](https://github.com/nicobailon/pi-agent-budget) (`pi install npm:pi-agent-budget`) — cost/budget tracking
+  - [pi-ssh-remote](https://github.com/petrichor20211/pi-ssh-remote) (`pi install npm:pi-ssh-remote`) — persistent remote SSH workspaces
+  - [pi-llm-wiki](https://github.com/zosmaai/pi-llm-wiki) (`pi install npm:@zosmaai/pi-llm-wiki`) — Karpathy LLM-wiki knowledge base (project + personal vault, lint, recall)
 
 ## Tests
 
