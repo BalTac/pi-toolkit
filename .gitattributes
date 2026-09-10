@@ -1,0 +1,4 @@
+# Normalise line endings. Shell scripts must stay LF so they keep running on
+# Linux/macOS and in Git Bash regardless of the platform that cloned the repo.
+* text=auto
+*.sh text eol=lf
