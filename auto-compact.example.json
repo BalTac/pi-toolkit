@@ -1,0 +1,43 @@
+{
+  "_comment": "Copy this to ~/.pi/agent/auto-compact.json to customise the auto-compact-percent extension. Every key is optional: missing or invalid values fall back to the defaults shown here (a broken file never stops pi from starting). The file is rewritten by the /autocompact command. Env overrides: PI_AUTO_COMPACT_PERCENT, PI_CONTEXT_MEMORY.",
+
+  "enabled": true,
+  "percent": 38,
+  "memory": true,
+  "memoryMaxTokens": 4000,
+  "toolTokenCap": 2000,
+  "keepRecent": { "auto": true, "ratio": 0.15, "min": 8000, "max": 60000 },
+
+  "retention": {
+    "enabled": true,
+    "budgetMB": 200,
+    "rotateAfterDays": 30,
+    "deleteAfterDays": 90,
+    "protectProjectDays": 14,
+    "compress": true
+  },
+
+  "_keys": {
+    "enabled": "Master switch for the extension.",
+    "percent": "Compaction trigger as a percentage of the model context window (10-80). 38 sits just below the ~40% mark where long-context quality starts to degrade.",
+    "memory": "Write a durable context memory (dense synthesis + full-fidelity raw archive) before each compaction, so the lossy step stays recoverable.",
+    "memoryMaxTokens": "Token cap for the recallable synthesis (500-32000). It is injected back into the context when recalled, so its price matters as much as its completeness.",
+    "toolTokenCap": "Maximum tokens a single tool result may inject into the context (200-32000); larger results are truncated.",
+    "keepRecent.auto": "Keep pi's compaction.keepRecentTokens proportional to the current model window. NOTE: this WRITES into ~/.pi/agent/settings.json — there is no per-compaction override in pi's extension API, and the write happens only when the computed value changes.",
+    "keepRecent.ratio": "Fraction of the context window to keep after compaction (0.02-0.5).",
+    "keepRecent.min_max": "Bounds for the computed keepRecentTokens. The value never exceeds percent * window * 0.8, so a compaction can always bring the context back under the trigger (no compaction loop).",
+    "retention.enabled": "Enable the archive retention sweep (runs on session_start).",
+    "retention.budgetMB": "Total raw-archive budget in MB. Above it the oldest unprotected archives are rotated; 0 disables budget-driven rotation.",
+    "retention.rotateAfterDays": "Rotate archives older than N days even while under budget; 0 disables age-driven rotation.",
+    "retention.deleteAfterDays": "Delete ROTATED archives N days after they were rotated; 0 never deletes. Counted from the rotation, not from creation.",
+    "retention.protectProjectDays": "Memories of the current project, and memories recalled within the last N days, are protected from rotation. The newest entry is never rotated.",
+    "retention.compress": "true = gzip the raw archive on rotation (stays recoverable, ~85% smaller); false = drop the raw archive outright."
+  },
+
+  "_where": {
+    "memory": "~/.pi/agent/context-memory/<id>.memory.md (synthesis — never deleted) and <id>.archive.jsonl (raw archive — rotated to .gz, then pruned)",
+    "ledger": "~/.pi/agent/context-memory/retention.json — usage ledger: recalls, last recall, project, bytes, status, rotatedAt",
+    "index": "~/.pi/agent/context-memory/index.md — human-readable append-only log, one line per compaction",
+    "commands": "/autocompact [percent] · /memoria list|search|recall|show|raw|dir · /memoria retention [apply]"
+  }
+}

@@ -18,6 +18,8 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 | **`subagent-setup`** | Interactive wizard that detects missing subagent models and helps you reconfigure them via pi's UI — no manual JSON editing. | No |
 | **`deepseek-balance`** | Shows DeepSeek credit balance and session cost in pi's status bar, with model in/out rates per 1M and a live peak/off-peak badge for DeepSeek V4 (peak 01:00–04:00 & 06:00–10:00 UTC, off-peak = half price). Auto-activates when the current provider is DeepSeek. | Optional — reads key from `~/.pi/agent/auth.json` or `DEEPSEEK_API_KEY` env var |
 | **`model-prices`** | `/pricing` (aliases `/prices`, `/model-prices`): full-screen price comparison of every available model (input/output/cache per 1M tokens from the model registry) with sort by price, peak/off-peak badge for DeepSeek V4, and instant model switch. `/pricing-report [path]` (aliases `/price-report`, `/pricing-html`): generates a self-contained HTML report with charts by type/category/provider/price bracket, filters, live peak/off-peak badge and a multi-select comparison picker, then opens it in the browser. | No |
+| **`auto-compact-percent`** | Compacts at a configurable **percentage** of the context window (default 38%, below the ~40% degradation onset) and makes the lossy step **recoverable**: before each compaction it writes a dense *context memory* (`~/.pi/agent/context-memory/<id>.memory.md`) plus a full-fidelity raw archive, exposed to the model via the `context_memory` tool and to you via `/memoria` (`list`, `search`, `recall`, `show`, `raw`, `dir`, `retention`). Archives are rotated logrotate-style (gzip) and pruned against a usage-based budget. ⚠️ It also keeps `compaction.keepRecentTokens` proportional to the model window by **writing** `~/.pi/agent/settings.json`. | No |
+| **`goal-mode`** | `/goal <task>`: the agent drafts a detailed roadmap, shows it for **approval**, then executes it step by step with a live progress widget (`/goal status`, `/goal steps`, `/goal approve`, `/goal cancel`). Also provides **`/grill-me`**, a structured interview that asks clarifying questions before planning. Tools: `goal_set_roadmap`, `goal_complete_step`, `grill_submit_interview`. State lives in the session. | No |
 | **`web_search` / `fetch_content` / `source_check` / `get_search_content`** | Web search, content fetching, claim verification, and content retrieval — provided by [pi-web-access](https://github.com/nicobailon/pi-web-access) (a **required** companion; 18+ search providers, GitHub cloning, YouTube transcripts, PDF extraction, video analysis). | Zero-config (Exa MCP) or add keys in `~/.pi/web-search.json` |
 
 ### Skills (on-demand guidance for the LLM)
@@ -177,6 +179,33 @@ Key features: git checkpoints with auto-revert on regression, atomic state write
 anti-tampering on success criteria, session resume across restarts, optional
 subagent delegation at each step.
 
+## Auto-compaction & context memory (`auto-compact-percent`)
+
+pi compacts the conversation when the context window fills up. This extension makes that lossy step **recoverable**.
+
+- **Threshold as a percentage** — `/autocompact` shows or sets the trigger as a share of the current model's context window (default **38%**, deliberately below the ~40% mark where long-context quality starts to degrade).
+- **Durable context memory** — before each compaction it writes a dense synthesis (`~/.pi/agent/context-memory/<id>.memory.md`, ~20 KB) **and** a full-fidelity raw archive of the messages that left the context (`<id>.archive.jsonl`, ~1.75 MB).
+- **Recall** — the model pulls a memory back with the `context_memory` tool; you use `/memoria list|search|recall|show|raw|dir`.
+- **Retention** — archives are rotated logrotate-style: when they age out or exceed the budget they are gzipped, and old **rotated** archives are deleted. Memory files are never deleted. Run `/memoria retention` for a dry-run report and `/memoria retention apply` to execute.
+- **`keepRecentTokens` auto-scaling** — keeps pi's `compaction.keepRecentTokens` proportional to the current model window (written atomically into `~/.pi/agent/settings.json`, only when the value actually changes — see the note below).
+
+Configuration lives in `~/.pi/agent/auto-compact.json` (see `auto-compact.example.json`). Env overrides: `PI_AUTO_COMPACT_PERCENT`, `PI_CONTEXT_MEMORY`.
+
+> **Note**: this extension is the only one in the toolkit that writes into your pi
+> settings. `compaction.keepRecentTokens` is a **global** setting and there is no
+> per-compaction override in pi's extension API, so auto-scaling the kept window
+> requires touching `settings.json`. The write is atomic, preserves every other key,
+> and happens only when the computed value differs from the stored one.
+
+## Goal mode (`/goal`) and interviews (`/grill-me`)
+
+- `/goal <description>` — the agent writes a detailed roadmap, shows it for **approval**, then executes it step by step, tracking progress in a widget and a status indicator: `/goal status`, `/goal steps`, `/goal approve`, `/goal cancel`.
+- `/grill-me` — a structured interview: clarifying questions with recommended options before any plan is written.
+- Tools exposed to the model: `goal_set_roadmap`, `goal_complete_step`, `grill_submit_interview`.
+- The goal lives in the **session**: it survives resuming that session and is lost in a brand-new one.
+
+Pairs well with the `loop` skill and with `subagent` delegation (a goal step can be delegated).
+
 ## Environment portability
 
 | What | Portable? | Notes |
@@ -184,6 +213,8 @@ subagent delegation at each step.
 | `web_search` / `fetch_content` (pi-web-access, required companion) | ⚠️ | Requires npm deps — auto-installed by pi when you `pi install npm:pi-web-access`. |
 | `install-guide` / `subagent-setup` | ✅ | Instant notifications + interactive wizard. |
 | `deepseek-balance` | ✅ | Reads key from auth.json or env var. |
+| `auto-compact-percent` | ✅ | Node builtins only. Writes `auto-compact.json`, `settings.json` and `context-memory/`. |
+| `goal-mode` | ✅ | Node builtins only, no state on disk. |
 | `loop` skill | ✅ | Bash required (pi requires it on all OS). |
 | Skills (.md files) | ✅ | Plain text, no OS dependencies. |
 | Subagent models config | ⚠️ per-environment | Configured via interactive wizard on first run. |
@@ -198,6 +229,21 @@ subagent delegation at each step.
   - [pi-intercom](https://github.com/nicobailon/pi-intercom) (`pi install npm:pi-intercom`) — cross-session messaging
   - [pi-usage](https://github.com/narumiruna/pi-extensions) (`pi install npm:@narumitw/pi-usage`) — provider usage/credit dashboard
   - [pi-agent-budget](https://github.com/nicobailon/pi-agent-budget) (`pi install npm:pi-agent-budget`) — cost/budget tracking
+
+## Tests
+
+There is no CI. The retention logic of `auto-compact-percent` ships with a
+self-contained harness that **extracts the module from the real source file**, so it
+can never drift from the shipped code, and exercises it against temporary
+directories (rotation, gzip, pruning window, protections, dry-run, ledger):
+
+```bash
+bash tests/run_retention_tests.sh            # defaults to extensions/auto-compact-percent.ts
+bash tests/run_retention_tests.sh /path/to/auto-compact-percent.ts
+```
+
+Requires `python3` and `esbuild` (both already present in a working pi environment).
+37 assertions, expected result: `37 PASSED, 0 FAILED`.
 
 ## Conflict handling
 
@@ -217,12 +263,18 @@ mv ~/.pi/agent/skills/subagent ~/.pi/agent/skills/subagent-old
 
 Then `/reload`.
 
-### Same-name tools (`web_search`)
+### Same-name tools (`web_search`, `context_memory`, `goal_*`)
 
 `web_search`, `fetch_content`, `source_check`, and `get_search_content` come
 from the **pi-web-access** companion. Install it **once** (`pi install
 npm:pi-web-access`). Do not install it a second way — e.g. both top-level and
 bundled inside an older pi-toolkit — or the tools would be registered twice.
+
+Same rule for `auto-compact-percent` and `goal-mode`: keep **one** copy. If you
+already have them as loose files in `~/.pi/agent/extensions/`, move those aside
+when you install/update this package. Skills degrade gracefully (pi keeps the first
+definition and warns), but extensions do not: you would get two independent states
+— two goal trackers and two compaction handlers writing the same files.
 
 ## License
 

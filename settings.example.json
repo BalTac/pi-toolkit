@@ -51,5 +51,13 @@
     }
   },
 
+  "_note_compaction": "The 'compaction' block below is optional. The auto-compact-percent extension (included in this toolkit) manages compaction.keepRecentTokens for you, adapting it to the current model context window — see auto-compact.example.json. Set it manually only if you run pi without that extension.",
+
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 60000
+  },
+
   "_note": "The subagent-setup extension (included) will offer to configure this interactively on first /reload if models are missing. You don't need to edit this file manually."
 }
