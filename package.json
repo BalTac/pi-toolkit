@@ -1,14 +1,14 @@
 {
   "name": "pi-toolkit",
   "version": "0.3.0",
-  "description": "Skills, extensions & tools for pi coding agent — subagent delegation, autonomous engineering loop, goal-mode roadmaps, auto-compaction with durable context memory and archive retention, DeepSeek balance tracker, provider usage guide. Ships no third-party pi packages; companion packages are surfaced by a post-install notification.",
+  "description": "Skills, extensions & tools for pi coding agent — subagent delegation, autonomous engineering loop, goal-mode roadmaps, auto-compaction with durable context memory and archive retention, DeepSeek rate/peak indicator, provider usage guide. Ships no third-party pi packages; companion packages are surfaced by a post-install notification.",
   "author": "BalTac",
   "license": "MIT",
   "pi": {
     "extensions": [
       "./extensions/install-guide.ts",
       "./extensions/subagent-setup.ts",
-      "./extensions/deepseek-balance",
+      "./extensions/deepseek-rates",
       "./extensions/model-prices",
       "./extensions/auto-compact-percent.ts",
       "./extensions/goal-mode.ts"

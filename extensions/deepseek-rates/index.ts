@@ -10,8 +10,9 @@
  * Removed in v2.0 (2026-09-10): session cost and remaining credit. Other
  * extensions display those (pi-usage / pi-agent-budget) and this one stays
  * focused on what they don't show. Side effect: the extension is now fully
- * local — no network calls, no API key, no config file. The historical
- * `~/.pi/deepseek-balance.json` (apiKey / cnyToUsd / enabled) is no longer read.
+ * local — no network calls, no API key, no config file. The historical file
+ * from v1.x (`~/.pi/deepseek-balance.json`, keys apiKey / cnyToUsd / enabled)
+ * is no longer read; that directory was also renamed to `deepseek-rates`.
  *
  * Auto-activates when the current model provider is "deepseek".
  * Refreshed on session_start, after each turn and on model switch; when there
@@ -71,7 +72,7 @@ function fmtStatus(
 // ── Extension ───────────────────────────────────────────────────────────
 
 export default function deepseekBalance(pi: ExtensionAPI) {
-  const STATUS_ID = "deepseek-balance";
+  const STATUS_ID = "deepseek-rates";
   let active = false;
 
   function refresh(ctx: ExtensionContext) {

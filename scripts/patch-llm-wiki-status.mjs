@@ -7,7 +7,7 @@
  * footer line, joined with a space and sorted by key (see pi's
  * dist/modes/interactive/components/footer.js). Newlines are stripped by
  * `sanitizeStatusText()`, so no status text can force a line break. With
- * `deepseek-balance` also writing there, the wiki badge and the active
+ * `deepseek-rates` also writing there, the wiki badge and the active
  * background-model label end up appended to (and eventually truncated by) the
  * balance line.
  *

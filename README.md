@@ -16,7 +16,7 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 |------|-------------|----------------|
 | **`install-guide`** | On session_start, checks the required/recommended companion packages and toasts any missing ones. Registers `/pi-toolkit-deps` and the `pi_toolkit_install_guide` tool so the LLM sees the install commands. | No |
 | **`subagent-setup`** | Interactive wizard that detects missing subagent models and helps you reconfigure them via pi's UI — no manual JSON editing. | No |
-| **`deepseek-balance`** | Shows the **selected model's in/out rates** per 1M tokens plus a live **peak/off-peak** badge for DeepSeek V4 (peak 01:00–04:00 & 06:00–10:00 UTC, off-peak = half price) in pi's status bar. Auto-activates when the current provider is DeepSeek. v2.0 dropped session cost and remaining credit — other tools display those (pi-usage, pi-agent-budget) — which also made the extension fully local. | No — model registry only, no API key, no network |
+| **`deepseek-rates`** | Shows the **selected model's in/out rates** per 1M tokens plus a live **peak/off-peak** badge for DeepSeek V4 (peak 01:00–04:00 & 06:00–10:00 UTC, off-peak = half price) in pi's status bar. Auto-activates when the current provider is DeepSeek. v2.0 dropped session cost and remaining credit — other tools display those (pi-usage, pi-agent-budget) — which also made the extension fully local. | No — model registry only, no API key, no network |
 | **`model-prices`** | `/pricing` (aliases `/prices`, `/model-prices`): full-screen price comparison of every available model (input/output/cache per 1M tokens from the model registry) with sort by price, peak/off-peak badge for DeepSeek V4, and instant model switch. `/pricing-report [path]` (aliases `/price-report`, `/pricing-html`): generates a self-contained HTML report with charts by type/category/provider/price bracket, filters, live peak/off-peak badge and a multi-select comparison picker, then opens it in the browser. | No |
 | **`auto-compact-percent`** | Compacts at a configurable **percentage** of the context window (default 38%, below the ~40% degradation onset) and makes the lossy step **recoverable**: before each compaction it writes a dense *context memory* (`~/.pi/agent/context-memory/<id>.memory.md`) plus a full-fidelity raw archive, exposed to the model via the `context_memory` tool and to you via `/memoria` (`list`, `search`, `recall`, `show`, `raw`, `dir`, `retention`). Archives are rotated logrotate-style (gzip) and pruned against a usage-based budget. ⚠️ It also keeps `compaction.keepRecentTokens` proportional to the model window by **writing** `~/.pi/agent/settings.json`. | No |
 | **`goal-mode`** | `/goal <task>`: the agent drafts a detailed roadmap, shows it for **approval**, then executes it step by step with a live progress widget (`/goal status`, `/goal steps`, `/goal approve`, `/goal cancel`). Also provides **`/grill-me`**, a structured interview that asks clarifying questions before planning. Tools: `goal_set_roadmap`, `goal_complete_step`, `grill_submit_interview`. State lives in the session. | No |
@@ -214,7 +214,7 @@ Pairs well with the `loop` skill and with `subagent` delegation (a goal step can
 |------|-----------|-------|
 | `web_search` / `fetch_content` (pi-web-access, required companion) | ⚠️ | Requires npm deps — auto-installed by pi when you `pi install npm:pi-web-access`. |
 | `install-guide` / `subagent-setup` | ✅ | Instant notifications + interactive wizard. |
-| `deepseek-balance` | ✅ | Fully local: model registry only — no network, no API key, no config file. |
+| `deepseek-rates` | ✅ | Fully local: model registry only — no network, no API key, no config file. |
 | `auto-compact-percent` | ✅ | Node builtins only. Writes `auto-compact.json`, `settings.json` and `context-memory/`. |
 | `goal-mode` | ✅ | Node builtins only, no state on disk. |
 | `loop` skill | ✅ | Bash required (pi requires it on all OS). |
@@ -262,7 +262,7 @@ node scripts/patch-llm-wiki-status.mjs --revert   # rollback
 
 | Script | Tweaks | Why |
 |--------|--------|-----|
-| `patch-llm-wiki-status.mjs` | `@zosmaai/pi-llm-wiki`: 3 × `setStatus` → `setWidget(..., { placement: "belowEditor" })` | pi renders **all** extension statuses on one footer line (`footer.js` joins them with a space, and `sanitizeStatusText()` strips newlines), so the wiki badge and the wiki-model label shared the line with the `deepseek-balance` rates. As widgets they each get their own line under the editor. |
+| `patch-llm-wiki-status.mjs` | `@zosmaai/pi-llm-wiki`: 3 × `setStatus` → `setWidget(..., { placement: "belowEditor" })` | pi renders **all** extension statuses on one footer line (`footer.js` joins them with a space, and `sanitizeStatusText()` strips newlines), so the wiki badge and the wiki-model label shared the line with the `deepseek-rates` rates. As widgets they each get their own line under the editor. |
 
 ⚠️ These patch files inside `node_modules`: a package update restores the
 original files, so **re-run the script after updating that package**.
