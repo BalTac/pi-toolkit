@@ -44,6 +44,8 @@ interface BalanceResponse {
 interface DeepSeekBalanceConfig {
   apiKey?: string;
   enabled?: boolean;
+  /** Optional CNY->USD rate override. If unset, a live rate is fetched (fallback 0.14). */
+  cnyToUsd?: number;
 }
 
 // ── Config ──────────────────────────────────────────────────────────────
@@ -99,8 +101,31 @@ function resolveApiKey(): string | null {
 
 const BALANCE_URL = "https://api.deepseek.com/user/balance";
 const CACHE_MS = 60_000;
+const FX_URL = "https://open.er-api.com/v6/latest/CNY";
+const FX_CACHE_MS = 10 * 60_000;
+const FALLBACK_CNY_USD = 0.14;
 
 let cachedBalance: { data: BalanceResponse; at: number } | null = null;
+let cachedFx: { usdPerCny: number; at: number } | null = null;
+
+/** CNY -> USD rate: live fetch (cached 10 min), else config override, else fixed fallback. */
+async function cnyToUsdRate(signal?: AbortSignal): Promise<number> {
+  const cfgOverride = loadConfig()?.cnyToUsd;
+  if (cfgOverride && cfgOverride > 0) return cfgOverride;
+  if (cachedFx && Date.now() - cachedFx.at < FX_CACHE_MS) return cachedFx.usdPerCny;
+  try {
+    const resp = await fetch(FX_URL, { signal });
+    if (resp.ok) {
+      const data = (await resp.json()) as { result?: string; rates?: { USD?: number } };
+      const usd = data?.rates?.USD;
+      if (data?.result === "success" && typeof usd === "number" && usd > 0) {
+        cachedFx = { usdPerCny: usd, at: Date.now() };
+        return usd;
+      }
+    }
+  } catch { /* fall through */ }
+  return FALLBACK_CNY_USD;
+}
 
 async function fetchBalance(apiKey: string, signal?: AbortSignal): Promise<BalanceResponse | null> {
   if (cachedBalance && Date.now() - cachedBalance.at < CACHE_MS) {
@@ -158,6 +183,7 @@ function fmtStatus(
   modelCost: { input: number; output: number } | null,
   period: "peak" | "off" | null,
   theme: { fg: (color: any, text: string) => string },
+  usdPerCny: number,
 ): string {
   const fg = (c: string, t: string) => theme.fg(c, t);
   const parts: string[] = [];
@@ -178,12 +204,14 @@ function fmtStatus(
     const info = balance.balance_infos[0]!;
     const total = parseFloat(info.total_balance);
     const remaining = total - cost;
-    const sym = info.currency === "CNY" ? "¥" : "$";
-
+    // DeepSeek reports the balance in CNY; convert to USD for display.
+    const usd = info.currency === "CNY" ? remaining * usdPerCny : remaining;
+    const sym = "$";
+    const text = `${sym}${usd.toFixed(2)} left`;
     if (balance.is_available) {
-      parts.push(fg("success", `${sym}${remaining.toFixed(2)} left`));
+      parts.push(fg("success", text));
     } else {
-      parts.push(fg("warning", `low ${sym}${remaining.toFixed(2)}`));
+      parts.push(fg("warning", `low ${text}`));
     }
   }
 
@@ -211,12 +239,13 @@ export default function deepseekBalance(pi: ExtensionAPI) {
 
     const cost = calcSessionCost(ctx);
     const balance = await fetchBalance(apiKey, ctx.signal);
+    const usdPerCny = await cnyToUsdRate(ctx.signal);
     const m = ctx.model;
     const modelCost = m?.cost
       ? { input: m.cost.input ?? 0, output: m.cost.output ?? 0 }
       : null;
     const period = m && PEAK_MODEL_RE.test(m.id) ? peakPeriod() : null;
-    ctx.ui.setStatus(STATUS_ID, fmtStatus(balance, cost, modelCost, period, ctx.ui.theme));
+    ctx.ui.setStatus(STATUS_ID, fmtStatus(balance, cost, modelCost, period, ctx.ui.theme, usdPerCny));
     active = true;
   }
 
