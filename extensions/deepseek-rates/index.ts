@@ -26,6 +26,7 @@
  */
 
 import type { ExtensionContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as fs from "node:fs";
 import { currentPeriod, ensureRates, getRates, ratesFor, type ModelRates, type Period } from "./rates.ts";
 
 // Re-exported for tests and backwards compatibility.
@@ -46,6 +47,7 @@ function fmtStatus(
   rates: ModelRates | null,
   fallback: { input: number; output: number } | null,
   period: Period,
+  ratio: number | null,
   theme: { fg: (color: any, text: string) => string },
 ): string {
   const fg = (c: string, t: string) => theme.fg(c, t);
@@ -61,6 +63,13 @@ function fmtStatus(
     parts.push(fg("text", `out $${fmtRate(fallback.output)}/M`));
   }
 
+  // session cache hit-ratio: share of input tokens served from the KV cache
+  if (ratio !== null) {
+    const pct = Math.round(ratio * 100);
+    const color = pct >= 70 ? "success" : pct >= 40 ? "text" : "warning";
+    parts.push(fg(color, `⚡ ${pct}% cached`));
+  }
+
   if (period === "peak") parts.push(fg("warning", "▲ peak"));
   else parts.push(fg("success", "▼ off-peak"));
 
@@ -73,6 +82,55 @@ export default function deepseekRates(pi: ExtensionAPI) {
   let active = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let lastCtx: ExtensionContext | null = null;
+
+  // Session cache accounting: input tokens served from the KV cache (hit) vs
+  // processed from scratch (miss). Seeded from the session file so a resumed
+  // session keeps the ratio built up so far.
+  let cacheHitTokens = 0;
+  let cacheMissTokens = 0;
+
+  function resetUsage(): void {
+    cacheHitTokens = 0;
+    cacheMissTokens = 0;
+  }
+
+  function accountUsage(usage: { input?: number; cacheRead?: number } | undefined): void {
+    if (!usage) return;
+    cacheHitTokens += usage.cacheRead ?? 0;
+    cacheMissTokens += usage.input ?? 0;
+  }
+
+  function cachedRatio(): number | null {
+    const total = cacheHitTokens + cacheMissTokens;
+    if (total <= 0) return null;
+    return cacheHitTokens / total;
+  }
+
+  /** Sum usage from the session file (bounded: skips very large files). */
+  function seedUsageFromSession(ctx: ExtensionContext): void {
+    resetUsage();
+    try {
+      const file = (
+        ctx as unknown as { sessionManager?: { getSessionFile?: () => string | undefined } }
+      ).sessionManager?.getSessionFile?.();
+      if (!file) return;
+      if (fs.statSync(file).size > 40 * 1024 * 1024) return;
+      const text = fs.readFileSync(file, "utf8");
+      for (const line of text.split("\n")) {
+        if (!line.includes('"usage"')) continue;
+        try {
+          const entry = JSON.parse(line) as {
+            message?: { usage?: { input?: number; cacheRead?: number } };
+          };
+          accountUsage(entry.message?.usage);
+        } catch {
+          /* skip malformed line */
+        }
+      }
+    } catch {
+      /* seeding is best-effort */
+    }
+  }
 
   function ensureTimer(): void {
     if (timer) return;
@@ -114,7 +172,7 @@ export default function deepseekRates(pi: ExtensionAPI) {
     const period = currentPeriod(data);
     const rates = m ? ratesFor(data, m.id) : null;
     const fallback = m?.cost ? { input: m.cost.input ?? 0, output: m.cost.output ?? 0 } : null;
-    const text = fmtStatus(rates, fallback, period, ctx.ui.theme);
+    const text = fmtStatus(rates, fallback, period, cachedRatio(), ctx.ui.theme);
 
     if (!text) {
       clearStatus(ctx);
@@ -134,9 +192,23 @@ export default function deepseekRates(pi: ExtensionAPI) {
     }
   }
 
-  pi.on("session_start", async (_event, ctx) => tick(ctx));
+  pi.on("session_start", async (_event, ctx) => {
+    seedUsageFromSession(ctx);
+    tick(ctx);
+  });
   pi.on("turn_end", async (_event, ctx) => tick(ctx));
   pi.on("model_select", async (_event, ctx) => tick(ctx));
+
+  // Cache accounting: every assistant message carries token usage.
+  pi.on("message_end", async (event, ctx) => {
+    if (event.message.role !== "assistant") return;
+    const usage = (
+      event.message as { usage?: { input?: number; cacheRead?: number } }
+    ).usage;
+    if (!usage) return;
+    accountUsage(usage);
+    render(ctx);
+  });
 
   pi.on("session_shutdown", async (_event, ctx) => {
     stopTimer();
