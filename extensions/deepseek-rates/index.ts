@@ -1,41 +1,40 @@
 /**
- * DeepSeek Rates Extension v2.0
+ * DeepSeek Rates Extension v3.0
  *
  * Shows DeepSeek *model rates* in the pi status bar:
- *   - Input/output rate per 1M tokens for the selected model (from pi's model
- *     registry, i.e. the same per-model `cost` configured in models-store.json)
- *   - Peak/off-peak indicator for DeepSeek V4 models (peak hours:
- *     01:00-04:00 and 06:00-10:00 UTC, off-peak = half price)
+ *   - input / output / cache-hit rate per 1M tokens for the selected model,
+ *     resolved from the period currently in effect (peak or off-peak)
+ *   - live peak/off-peak badge
+ *
+ * Data layer: see `rates.ts` (shared with the `model-prices` extension).
+ *   - Rates + peak schedule come from the official pricing page (DeepSeek
+ *     exposes no pricing API); the live model list comes from `GET /models`.
+ *   - The peak/off-peak badge is re-evaluated on a 5-minute cycle. That is pure
+ *     local clock math: no network.
+ *   - Prices are fetched only when the cache is older than a day (PRICES_TTL_MS).
+ *   - Falls back to pi's model registry (`ctx.model.cost`) when no fetched rates
+ *     match the selected model, so the status never goes blank.
+ *   - The refresh timer is started on demand and cleared on session_shutdown.
+ *
+ * Note: v2.x ignored the "Monday through Friday" part of the peak schedule and
+ * matched models with /^deepseek-v4/, which hid the badge for `deepseek-flash`.
+ * Both are fixed here: the weekday rule is honoured and any model with fetched
+ * rates gets a peak badge.
  *
  * Removed in v2.0 (2026-09-10): session cost and remaining credit. Other
- * extensions display those (pi-usage / pi-agent-budget) and this one stays
- * focused on what they don't show. Side effect: the extension is now fully
- * local — no network calls, no API key, no config file. The historical file
- * from v1.x (`~/.pi/deepseek-balance.json`, keys apiKey / cnyToUsd / enabled)
- * is no longer read; that directory was also renamed to `deepseek-rates`.
- *
- * Auto-activates when the current model provider is "deepseek".
- * Refreshed on session_start, after each turn and on model switch; when there
- * is nothing to show (no rates, no peak info) the status is cleared.
+ * extensions display those (pi-usage / pi-agent-budget).
  */
 
 import type { ExtensionContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { currentPeriod, ensureRates, getRates, ratesFor, type ModelRates, type Period } from "./rates.ts";
 
-// ── Peak / off-peak ────────────────────────────────────────────────────
-// DeepSeek V4 peak hours: 01:00-04:00 and 06:00-10:00 UTC.
-// All other hours are off-peak, priced at half the peak rate.
-const PEAK_MODEL_RE = /^deepseek-v4/;
+// Re-exported for tests and backwards compatibility.
+export { parsePricing, peakPeriod } from "./rates.ts";
 
-function peakPeriod(now: Date = new Date()): "peak" | "off" {
-  const h = now.getUTCHours();
-  return (h >= 1 && h < 4) || (h >= 6 && h < 10) ? "peak" : "off";
-}
+const STATUS_ID = "deepseek-rates";
+const REFRESH_MS = 5 * 60 * 1000; // 5 minutes — re-evaluate the peak badge
 
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-function isDeepSeek(ctx: ExtensionContext): boolean {
-  return ctx.model?.provider === "deepseek";
-}
+// ── Formatting ──────────────────────────────────────────────────────────
 
 function fmtRate(v: number): string {
   if (v >= 1) return v.toFixed(2);
@@ -43,74 +42,105 @@ function fmtRate(v: number): string {
   return v.toFixed(4).replace(/\.?0+$/, "");
 }
 
-/**
- * Status text: selected-model rates + peak/off-peak. Empty string when there is
- * nothing to show (caller clears the status instead of rendering blank space).
- */
 function fmtStatus(
-  modelCost: { input: number; output: number } | null,
-  period: "peak" | "off" | null,
+  rates: ModelRates | null,
+  fallback: { input: number; output: number } | null,
+  period: Period,
   theme: { fg: (color: any, text: string) => string },
 ): string {
   const fg = (c: string, t: string) => theme.fg(c, t);
   const parts: string[] = [];
 
-  if (modelCost && (modelCost.input > 0 || modelCost.output > 0)) {
-    parts.push(fg("text", `in $${fmtRate(modelCost.input)}/M`));
-    parts.push(fg("text", `out $${fmtRate(modelCost.output)}/M`));
+  if (rates) {
+    parts.push(fg("text", `in $${fmtRate(rates.cacheMiss[period])}/M`));
+    parts.push(fg("text", `out $${fmtRate(rates.output[period])}/M`));
+    parts.push(fg("text", `cache $${fmtRate(rates.cacheHit[period])}/M`));
+  } else if (fallback && (fallback.input > 0 || fallback.output > 0)) {
+    // registry rates (may be stale)
+    parts.push(fg("text", `in $${fmtRate(fallback.input)}/M`));
+    parts.push(fg("text", `out $${fmtRate(fallback.output)}/M`));
   }
 
-  if (period === "peak") {
-    parts.push(fg("warning", "▲ peak"));
-  } else if (period === "off") {
-    parts.push(fg("success", "▼ off-peak"));
-  }
+  if (period === "peak") parts.push(fg("warning", "▲ peak"));
+  else parts.push(fg("success", "▼ off-peak"));
 
   return parts.join(" · ");
 }
 
 // ── Extension ───────────────────────────────────────────────────────────
 
-export default function deepseekBalance(pi: ExtensionAPI) {
-  const STATUS_ID = "deepseek-rates";
+export default function deepseekRates(pi: ExtensionAPI) {
   let active = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let lastCtx: ExtensionContext | null = null;
 
-  function refresh(ctx: ExtensionContext) {
-    if (!isDeepSeek(ctx)) {
-      if (active) { ctx.ui.setStatus(STATUS_ID, undefined); active = false; }
+  function ensureTimer(): void {
+    if (timer) return;
+    timer = setInterval(() => {
+      // 5-minute cycle: refresh the peak/off-peak badge (local clock math),
+      // and pull prices only when the cache is older than a day.
+      render(lastCtx);
+      void ensureRates().then(() => render(lastCtx));
+    }, REFRESH_MS);
+    // do not keep the process alive only for this timer
+    const t = timer as unknown as { unref?: () => void };
+    if (typeof t.unref === "function") t.unref();
+  }
+
+  function stopTimer(): void {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  function clearStatus(ctx: ExtensionContext): void {
+    if (active) {
+      ctx.ui.setStatus(STATUS_ID, undefined);
+      active = false;
+    }
+  }
+
+  function render(ctx: ExtensionContext | null): void {
+    if (!ctx) return;
+    if (ctx.model?.provider !== "deepseek") {
+      stopTimer(); // nothing to keep polling for
+      clearStatus(ctx);
       return;
     }
 
+    const data = getRates();
     const m = ctx.model;
-    const modelCost = m?.cost
-      ? { input: m.cost.input ?? 0, output: m.cost.output ?? 0 }
-      : null;
-    const period = m && PEAK_MODEL_RE.test(m.id) ? peakPeriod() : null;
-    const text = fmtStatus(modelCost, period, ctx.ui.theme);
+    const period = currentPeriod(data);
+    const rates = m ? ratesFor(data, m.id) : null;
+    const fallback = m?.cost ? { input: m.cost.input ?? 0, output: m.cost.output ?? 0 } : null;
+    const text = fmtStatus(rates, fallback, period, ctx.ui.theme);
 
     if (!text) {
-      // Nothing to show (no rates configured, no peak window) → stay quiet.
-      if (active) { ctx.ui.setStatus(STATUS_ID, undefined); active = false; }
+      clearStatus(ctx);
       return;
     }
-
     ctx.ui.setStatus(STATUS_ID, text);
     active = true;
   }
 
-  pi.on("session_start", async (_event, ctx) => {
-    refresh(ctx);
-  });
+  function tick(ctx: ExtensionContext): void {
+    lastCtx = ctx;
+    render(ctx);
+    if (ctx.model?.provider === "deepseek") {
+      ensureTimer();
+      // ensureRates() is a no-op unless the cached prices are older than a day.
+      void ensureRates().then(() => render(ctx));
+    }
+  }
 
-  pi.on("turn_end", async (_event, ctx) => {
-    refresh(ctx);
-  });
-
-  pi.on("model_select", async (_event, ctx) => {
-    refresh(ctx);
-  });
+  pi.on("session_start", async (_event, ctx) => tick(ctx));
+  pi.on("turn_end", async (_event, ctx) => tick(ctx));
+  pi.on("model_select", async (_event, ctx) => tick(ctx));
 
   pi.on("session_shutdown", async (_event, ctx) => {
-    if (active) { ctx.ui.setStatus(STATUS_ID, undefined); active = false; }
+    stopTimer();
+    clearStatus(ctx);
+    lastCtx = null;
   });
 }

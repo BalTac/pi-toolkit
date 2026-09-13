@@ -33,7 +33,20 @@ const PALETTE = [
   "#f07cb9", "#a3e635", "#f87171", "#67e8f9", "#c4b5fd",
 ];
 
-export function buildReport(models: ReportModel[]): string {
+export interface PeakConfig {
+  windows: { start: number; end: number }[];
+  weekdaysOnly: boolean;
+}
+
+const DEFAULT_PEAK: PeakConfig = {
+  windows: [
+    { start: 1, end: 4 },
+    { start: 6, end: 10 },
+  ],
+  weekdaysOnly: true,
+};
+
+export function buildReport(models: ReportModel[], peak: PeakConfig = DEFAULT_PEAK): string {
   const serialized = models.map((m) => ({
     provider: m.provider,
     id: m.id,
@@ -53,6 +66,12 @@ export function buildReport(models: ReportModel[]): string {
 
   // Safe embedding: escape < so "</script>" can never appear inside the JSON.
   const dataJson = JSON.stringify(serialized).replace(/</g, "\\u003c");
+  // Peak schedule comes from the shared rates layer, so the badge in the report
+  // honours the weekdays-only rule and follows DeepSeek's own schedule.
+  const peakJson = JSON.stringify({
+    windows: peak.windows?.length ? peak.windows : DEFAULT_PEAK.windows,
+    weekdaysOnly: peak.weekdaysOnly ?? true,
+  }).replace(/</g, "\\u003c");
 
   return `<!doctype html>
 <html lang="en">
@@ -176,6 +195,7 @@ export function buildReport(models: ReportModel[]): string {
 </main>
 <script>
 const MODELS = ${dataJson};
+const PEAK = ${peakJson};
 
 const $ = (id) => document.getElementById(id);
 const PALETTE = ${JSON.stringify(PALETTE)};
@@ -205,8 +225,10 @@ function tierOf(m) {
 }
 
 function peakPeriod(now) {
+  const day = now.getUTCDay();
+  if (PEAK.weekdaysOnly && (day === 0 || day === 6)) return "off";
   const h = now.getUTCHours();
-  return (h >= 1 && h < 4) || (h >= 6 && h < 10) ? "peak" : "off";
+  return PEAK.windows.some((w) => h >= w.start && h < w.end) ? "peak" : "off";
 }
 function updatePeak() {
   const el = $("peak-status");

@@ -5,10 +5,15 @@
  * Commands: /pricing  (aliases: /prices, /model-prices)
  *
  * Opens a full-screen list of every available model with its
- * per-1M-token rates (input / output / cache read) straight from
- * pi's model registry (the same `cost` configured in models-store.json).
+ * per-1M-token rates (input / output / cache read).
  *
- *   → deepseek-v4-pro [deepseek] ✓  in $0.435/M · out $0.87/M · cache $0.0036/M · ctx 1M
+ * Rates come from pi's model registry (the same `cost` configured in
+ * models-store.json), EXCEPT for DeepSeek models: those use the live rates
+ * fetched by the shared rates layer (see ../deepseek-rates/rates.ts), because
+ * the registry copy is known to be stale. DeepSeek rates and the peak schedule
+ * are cached for a day, so opening the picker normally costs no network.
+ *
+ *   → deepseek-v4-pro [deepseek] ✓  in $0.66/M · out $1.98/M · cache $0.022/M · ctx 1M
  *
  * Keys:
  *   ↑/↓ or j/k ... navigate
@@ -23,6 +28,15 @@ import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { buildReport } from "./report.ts";
+import {
+  applyDeepSeekRates,
+  currentPeriod,
+  DEFAULT_PEAK_WINDOWS,
+  ensureRates,
+  hasDeepSeek,
+  type Period,
+  type RatesData,
+} from "../deepseek-rates/rates.ts";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -47,12 +61,15 @@ type Done = (model: ModelLike | null) => void;
 
 type SortMode = "name" | "in" | "out";
 
-// DeepSeek V4 peak hours: 01:00-04:00 and 06:00-10:00 UTC (off-peak = half price).
-const PEAK_MODEL_RE = /^deepseek-v4/;
-
-function peakPeriod(now: Date = new Date()): "peak" | "off" {
-  const h = now.getUTCHours();
-  return (h >= 1 && h < 4) || (h >= 6 && h < 10) ? "peak" : "off";
+/** Peak schedule embedded in the HTML report so its badge honours weekdays. */
+function peakConfigOf(data: RatesData | null): {
+  windows: { start: number; end: number }[];
+  weekdaysOnly: boolean;
+} {
+  return {
+    windows: data?.peakWindows ?? DEFAULT_PEAK_WINDOWS,
+    weekdaysOnly: data?.weekdaysOnly ?? true,
+  };
 }
 
 // ── Formatting helpers ──────────────────────────────────────────────────
@@ -129,6 +146,7 @@ class PricePicker {
     theme: ThemeLike,
     kb: KeybindingsLike,
     done: Done,
+    period: Period | null,
   ) {
     this.all = all;
     this.scoped = scoped;
@@ -136,7 +154,7 @@ class PricePicker {
     this.theme = theme;
     this.kb = kb;
     this.done = done;
-    this.period = all.some((m) => PEAK_MODEL_RE.test(m.id)) ? peakPeriod() : null;
+    this.period = period;
     this.scope = scoped.length > 0 ? "scoped" : "all";
     this.rebuild();
   }
@@ -285,12 +303,21 @@ export default function modelPrices(pi: ExtensionAPI) {
       return;
     }
 
-    const all = ctx.modelRegistry.getAvailable() as ModelLike[];
-    const scoped = ctx.scopedModels.map((s) => s.model as ModelLike);
-    const current = ctx.model as ModelLike | undefined;
+    // DeepSeek: use the live rates (registry copy is stale). Cached for a day,
+    // so this is a no-op unless the cache expired.
+    const data = await ensureRates();
+    const period = currentPeriod(data);
+    const all = applyDeepSeekRates(ctx.modelRegistry.getAvailable() as ModelLike[], data, period);
+    const scoped = applyDeepSeekRates(
+      ctx.scopedModels.map((s) => s.model as ModelLike),
+      data,
+      period,
+    );
+    const current = (ctx.model as ModelLike | undefined) ?? undefined;
+    const badgePeriod = hasDeepSeek(all) ? period : null;
 
     const selected = await ctx.ui.custom<ModelLike | null>((tui, theme, kb, done) => {
-      const picker = new PricePicker(all, scoped, current, theme, kb, done);
+      const picker = new PricePicker(all, scoped, current, theme, kb, done, badgePeriod);
       return {
         render: (w: number) => picker.render(w),
         handleInput: (d: string) => {
@@ -333,13 +360,16 @@ export default function modelPrices(pi: ExtensionAPI) {
   // multi-select comparison picker, then opens it in the browser.
 
   const generateReport = async (args: string, ctx: ExtensionCommandContext): Promise<void> => {
-    const all = ctx.modelRegistry.getAvailable() as ModelLike[];
+    // DeepSeek entries use the live rates (same shared cache as /pricing).
+    const data = await ensureRates();
+    const period = currentPeriod(data);
+    const all = applyDeepSeekRates(ctx.modelRegistry.getAvailable() as ModelLike[], data, period);
     if (all.length === 0) {
       ctx.ui.notify("No models available in the registry", "warning");
       return;
     }
 
-    const html = buildReport(all);
+    const html = buildReport(all, peakConfigOf(data));
     const arg = args.trim();
     const outPath = arg
       ? (path.isAbsolute(arg) ? arg : path.join(ctx.cwd, arg))
