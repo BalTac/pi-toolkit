@@ -34,7 +34,37 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 | Agent | Role | Tier |
 |-------|------|------|
 | **`researcher`** | Autonomous web researcher using pi-web-access tools (`web_search`, `fetch_content`, `source_check`). | light |
+| **`researcher-orchestrator`** | Variant of `researcher` that **orchestrates** instead of searching alone: plans 2-4 angles, delegates local work to `analyst`/`scout` through nested fanout (`allowNestedSubagents`), then synthesizes. Runs on a stronger model and excludes `bash`/`edit`. | heavy |
 | **`analyst`** | Read-only code/data analyst. Inspects files, runs safe commands, produces measurements — zero side effects. | light |
+
+> **⚠️ pi-subagents 0.67.0 silently strips extension tools from `tools:` allowlists.**
+>
+> An agent profile that declares `web_search`, `fetch_content`, `source_check` or `get_search_content`
+> in `tools:` gets a child with **only `read`, `write` and `contact_supervisor`**. No web access, no
+> error: the run completes with exit 0 and the brief is written from model memory alone.
+>
+> Cause: the host-tool intersection added in 0.67.0 (`getHostBuiltinToolNames()` in
+> `src/runs/shared/child-tool-plan.ts`) keeps only tools whose `sourceInfo.source` is `builtin` or a
+> known `auto` name, while extension tools register as `npm:<package>`. Every declared extension tool
+> name is therefore classified as "host unavailable" and pruned. `contact_supervisor` survives only
+> because `NATIVE_COORDINATION_TOOL_NAMES` exempts it. The dispatcher warns, but only in the runner
+> log:
+>
+> ```
+> Agent 'researcher': host runtime tool availability omitted [web_search, fetch_content, ...].
+> effective tool allowlist: [read, write, contact_supervisor]
+> ```
+>
+> **Status:** upstream issue [#2134](https://github.com/nicobailon/pi-subagents/issues/2134), closed
+> as fixed in the **unreleased** branch (`npm` still ships 0.67.0, where the intersection landed).
+> **Do not patch `node_modules`** — the package is third-party and an update reverts it.
+>
+> **What this toolkit does instead:** the profiles above omit `tools:` entirely and load the provider
+> with `subagentOnlyExtensions`. Note that **an allowlisted tool name does not load the extension that
+> registers it**, so `subagentOnlyExtensions` (or `extensions`) is required either way — that part is
+> not a workaround. To narrow the inherited set, use `excludeTools` (see
+> [#1776](https://github.com/nicobailon/pi-subagents/issues/1776)), which is not affected by the
+> intersection. Revisit only after a release newer than 0.67.0 ships.
 
 ## Quick install
 
@@ -148,6 +178,7 @@ Available agents after installing `pi-subagents` (plus the custom `researcher` a
 |-------|------|---------|
 | `scout` | light | Fast local codebase recon → compressed findings |
 | `researcher` | light | Web/docs research with cited sources (custom — uses pi-web-access) |
+| `researcher-orchestrator` | heavy | Variant that delegates local work to `analyst`/`scout` via nested fanout, then synthesizes (custom) |
 | `analyst` | light | Read-only measurements and reports (custom) |
 | `delegate` | light | General-purpose child close to parent behavior |
 | `planner` | powerful | Concrete implementation plans (read-only) |

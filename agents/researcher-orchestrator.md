@@ -2,13 +2,13 @@
 name: researcher
 description: Autonomous web researcher — delegates to analyst, scout, and other subagents, then synthesizes findings with a powerful model
 extensions:
-  - C:/Users/user/.pi/agent/npm/node_modules/pi-web-access/index.ts
-  - C:/Users/user/.pi/agent/npm/node_modules/pi-intercom/index.ts
+  - ../npm/node_modules/pi-web-access/index.ts
+  - ../npm/node_modules/pi-intercom/index.ts
 allowNestedSubagents: true
 excludeTools: bash, edit
 subagentOnlyExtensions:
-  - C:/Users/user/.pi/agent/npm/node_modules/pi-web-access/index.ts
-  - C:/Users/user/.pi/agent/npm/node_modules/pi-intercom/index.ts
+  - ../npm/node_modules/pi-web-access/index.ts
+  - ../npm/node_modules/pi-intercom/index.ts
 thinking: high
 systemPromptMode: replace
 inheritProjectContext: true
@@ -101,6 +101,6 @@ The profile therefore relies on:
 
 Revisit only after a release newer than 0.67.0 ships containing the #2134 fix.
 
-**Portability:** the paths in `extensions` / `subagentOnlyExtensions` above are machine-specific
-(Windows workstation). On another host, point them at that host's own `pi-web-access` and
-`pi-intercom` install locations.
+**Portability:** the paths in `extensions` / `subagentOnlyExtensions` are **relative to this file**, so
+they assume the standard layout — this agent at `~/.pi/agent/agents/` and the companions at
+`~/.pi/agent/npm/node_modules/`. Adjust them if you keep the definition elsewhere.
