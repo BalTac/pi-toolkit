@@ -75,6 +75,12 @@ const COMPANIONS: Companion[] = [
     kind: "recommended",
     note: "Karpathy LLM-wiki knowledge base: compounding project + personal vault, lint and recall (/wiki-init, /wiki-ingest, wiki_lint)",
   },
+  {
+    source: "npm:@vanillagreen/pi-caveman",
+    name: "pi-caveman",
+    kind: "recommended",
+    note: "caveman speaking style: terser replies on demand (/caveman), off by default; output-side only, ~-27% output tokens per call measured",
+  },
 ];
 
 function normalizeSource(spec: string): string {

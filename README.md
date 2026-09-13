@@ -91,7 +91,23 @@ pi install npm:@narumitw/pi-usage             # recommended — provider usage /
 pi install npm:pi-agent-budget               # recommended — cost / budget tracking (/budget)
 pi install npm:pi-ssh-remote                 # recommended — persistent remote SSH workspaces (/remote)
 pi install npm:@zosmaai/pi-llm-wiki          # recommended — Karpathy LLM-wiki knowledge base (/wiki-init, /wiki-ingest, wiki_lint)
+pi install npm:@vanillagreen/pi-caveman      # recommended — caveman style: terser replies on demand (/caveman), off by default
 ```
+
+**On `caveman` (measured, not assumed).** The extension only shortens **output**, and output was
+**8.7%** of the spend recorded on this machine (`cache_read` 37.2%, input miss 30.6%,
+`cache_write` 23.5%). A local A/B bench (49 runs per arm, `deepseek-v4-flash`, thinking pinned)
+puts the real effect at **−27% output tokens per call / −35% cost per run** on prose prompts, but
+only **−10%** on tool-heavy prompts, and the injected prefix costs ~**+295 tokens per call** (paid at
+cache-read prices). Net on the real profile: **≈1.6% of total spend** — real, measurable, and much
+smaller than the **65%** the upstream README advertises. It is off by default: enable with
+`/caveman full`.
+
+> ⚠️ **Do not use `@caveman-ai/pi` (the "big rock" proxy) with DeepSeek.** Tested 2026-09-13: the
+> documented `pi install npm:@caveman-ai/pi` path sent the DeepSeek key to OpenAI and returned a hard
+> `401` — it breaks the agent outright, and the fallback it advertises does not trigger. The
+> `caveman wrap pi` path is safe but declares **pass-through** for DeepSeek ("no compat mount named
+> deepseek in the local proxy"), so it compresses nothing.
 
 ### 3. Configure models for subagents
 
