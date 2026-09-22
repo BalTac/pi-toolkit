@@ -137,8 +137,8 @@ export default function deepseekRates(pi: ExtensionAPI) {
     timer = setInterval(() => {
       // 5-minute cycle: refresh the peak/off-peak badge (local clock math),
       // and pull prices only when the cache is older than a day.
-      render(lastCtx);
-      void ensureRates().then(() => render(lastCtx));
+      safeRender(lastCtx);
+      void ensureRates().then(() => safeRender(lastCtx));
     }, REFRESH_MS);
     // do not keep the process alive only for this timer
     const t = timer as unknown as { unref?: () => void };
@@ -182,13 +182,26 @@ export default function deepseekRates(pi: ExtensionAPI) {
     active = true;
   }
 
+  // Rendering from an async continuation can land after the session was torn
+  // down (shutdown/reload): the captured ctx is then stale and every getter
+  // throws. Skipping the stale ctx avoids an unhandled rejection that would
+  // abort headless (`pi -p`) runs with a non-zero exit code.
+  function safeRender(ctx: ExtensionContext | null): void {
+    if (!ctx || ctx !== lastCtx) return;
+    try {
+      render(ctx);
+    } catch {
+      /* ctx invalidated mid-flight (session shutdown/reload); ignore */
+    }
+  }
+
   function tick(ctx: ExtensionContext): void {
     lastCtx = ctx;
     render(ctx);
     if (ctx.model?.provider === "deepseek") {
       ensureTimer();
       // ensureRates() is a no-op unless the cached prices are older than a day.
-      void ensureRates().then(() => render(ctx));
+      void ensureRates().then(() => safeRender(ctx));
     }
   }
 
