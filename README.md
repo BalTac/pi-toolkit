@@ -37,34 +37,41 @@ Skills, extensions, and tools for the [pi coding agent](https://github.com/earen
 | **`researcher-orchestrator`** | Variant of `researcher` that **orchestrates** instead of searching alone: plans 2-4 angles, delegates local work to `analyst`/`scout` through nested fanout (`allowNestedSubagents`), then synthesizes. Runs on a stronger model and excludes `bash`/`edit`. | heavy |
 | **`analyst`** | Read-only code/data analyst. Inspects files, runs safe commands, produces measurements — zero side effects. | light |
 
-> **⚠️ pi-subagents 0.67.0 silently strips extension tools from `tools:` allowlists.**
+> **How these agents load.** They are declared in `package.json` under `pi.subagents.agents`
+> (`{"pi":{"subagents":{"agents":["./agents"]}}}`) and are discovered by pi-subagents as
+> `pi-toolkit@<version>` **package agents** — above builtins, below user and project agents.
 >
-> An agent profile that declares `web_search`, `fetch_content`, `source_check` or `get_search_content`
-> in `tools:` gets a child with **only `read`, `write` and `contact_supervisor`**. No web access, no
-> error: the run completes with exit 0 and the brief is written from model memory alone.
+> **Extension paths are relative to the agent file.** `researcher` and `researcher-orchestrator` load
+> pi-web-access (and pi-intercom for the orchestrator) via
+> `subagentOnlyExtensions: ../../../../../npm/node_modules/pi-web-access/index.ts`. That depth assumes
+> the documented install, `~/.pi/agent/git/github.com/<owner>/<repo>/agents/` resolving up to
+> `~/.pi/agent/npm/node_modules/`. Local-path installs, or a different git host depth, must adjust it.
+> These paths are **required, not optional**: local foreground children are sessions inside the parent
+> Pi process and never load the parent's ambient extensions. Background children do load ambient
+> extensions and also pick up `subagentOnlyExtensions`.
+
+> **pi-subagents tool-allowlist bug — resolved, kept for reference.**
 >
-> Cause: the host-tool intersection added in 0.67.0 (`getHostBuiltinToolNames()` in
-> `src/runs/shared/child-tool-plan.ts`) keeps only tools whose `sourceInfo.source` is `builtin` or a
-> known `auto` name, while extension tools register as `npm:<package>`. Every declared extension tool
-> name is therefore classified as "host unavailable" and pruned. `contact_supervisor` survives only
-> because `NATIVE_COORDINATION_TOOL_NAMES` exempts it. The dispatcher warns, but only in the runner
-> log:
+> pi-subagents 0.67.0 silently stripped extension tools from `tools:` allowlists: a profile declaring
+> `web_search`, `fetch_content`, `source_check` or `get_search_content` got a child with **only
+> `read`, `write` and `contact_supervisor`** — no web access, no error, exit 0, and the brief written
+> from model memory alone. Cause: the host-tool intersection added in 0.67.0
+> (`getHostBuiltinToolNames()` in `src/runs/shared/child-tool-plan.ts`) kept only tools whose
+> `sourceInfo.source` was `builtin` or a known `auto` name, while extension tools register as
+> `npm:<package>`; every declared extension tool name was classified as "host unavailable" and pruned.
+> `contact_supervisor` survived only because `NATIVE_COORDINATION_TOOL_NAMES` exempts it.
 >
-> ```
-> Agent 'researcher': host runtime tool availability omitted [web_search, fetch_content, ...].
-> effective tool allowlist: [read, write, contact_supervisor]
-> ```
+> **Status:** upstream issue [#2134](https://github.com/nicobailon/pi-subagents/issues/2134) is fixed.
+> The fix ships in **0.70.1**, whose changelog records *"Preserve wrapped Pi core tools and explicitly
+> requested non-core tools in child launches. Core slots still respect host availability; non-core
+> tools are validated in the child's runtime after ceilings and exclusions (#2132, #2133, #2134,
+> #2135, #2140)."* Do not patch `node_modules` — just keep pi-subagents current.
 >
-> **Status:** upstream issue [#2134](https://github.com/nicobailon/pi-subagents/issues/2134), closed
-> as fixed in the **unreleased** branch (`npm` still ships 0.67.0, where the intersection landed).
-> **Do not patch `node_modules`** — the package is third-party and an update reverts it.
->
-> **What this toolkit does instead:** the profiles above omit `tools:` entirely and load the provider
-> with `subagentOnlyExtensions`. Note that **an allowlisted tool name does not load the extension that
-> registers it**, so `subagentOnlyExtensions` (or `extensions`) is required either way — that part is
-> not a workaround. To narrow the inherited set, use `excludeTools` (see
-> [#1776](https://github.com/nicobailon/pi-subagents/issues/1776)), which is not affected by the
-> intersection. Revisit only after a release newer than 0.67.0 ships.
+> **Still true at any version:** an allowlisted tool name does **not** load the extension that
+> registers it, so the provider must be loaded explicitly through `subagentOnlyExtensions`,
+> `extensions`, or a path-like `tools` entry. The profiles above therefore omit `tools:` and load the
+> provider explicitly. To narrow the inherited set, use `excludeTools` (see
+> [#1776](https://github.com/nicobailon/pi-subagents/issues/1776)), which was never affected.
 
 ## Quick install
 
@@ -113,7 +120,13 @@ smaller than the **65%** the upstream README advertises. It is off by default: e
 
 On first `/reload`, the **subagent-setup wizard** will detect that your configured models don't match this environment and offer to reconfigure them via an interactive selector. Pick one **light** model (fast/cheap — for scout, researcher, analyst, delegate) and one **powerful** model (full capability — for planner, worker, reviewer, oracle).
 
-If you skip the wizard, subagents simply inherit your current session model (safe fallback).
+If you skip the wizard, subagents simply inherit your current session model (safe fallback). The
+agent profiles deliberately declare **no** `model:`, so nothing is hardcoded to one environment:
+resolution comes from `subagents.defaultModel` / `agentOverrides` below, else the session model.
+
+Use the exact ids reported by `pi --list-models` for your provider. Provider catalogues differ over
+time and between machines — on a current DeepSeek setup the ids are `deepseek-flash` and
+`deepseek-v4-pro`, and a stale id such as `deepseek-v4-flash` will not resolve.
 
 Model config lives in `~/.pi/agent/settings.json` under `subagents`:
 
