@@ -27,10 +27,35 @@
 
 import type { ExtensionContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs";
-import { currentPeriod, ensureRates, getRates, ratesFor, type ModelRates, type Period } from "./rates.ts";
+import { currentPeriod, deepSeekCost, ensureRates, getRates, ratesFor, type ModelRates, type Period } from "./rates.ts";
 
 // Re-exported for tests and backwards compatibility.
 export { parsePricing, peakPeriod } from "./rates.ts";
+
+/**
+ * Minimal shape of a registry model, used to re-register the DeepSeek provider
+ * with period-aware costs. Every field is copied through so the re-registration
+ * is a faithful replacement except for `cost`.
+ */
+interface DeepSeekModelDef {
+  provider: string;
+  id: string;
+  name?: string;
+  api?: string;
+  baseUrl?: string;
+  reasoning?: boolean;
+  thinkingLevelMap?: unknown;
+  input?: string[];
+  inputLimits?: unknown;
+  cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  promptCache?: unknown;
+  contextWindow?: number;
+  maxTokens?: number;
+  samplingParams?: Record<string, unknown>;
+  headers?: Record<string, string>;
+  compat?: unknown;
+  [key: string]: unknown;
+}
 
 const STATUS_ID = "deepseek-rates";
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes — re-evaluate the peak badge
@@ -82,6 +107,52 @@ export default function deepseekRates(pi: ExtensionAPI) {
   let active = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let lastCtx: ExtensionContext | null = null;
+
+  // ── Registry cost override ─────────────────────────────────────────────
+  // pi core computes `usage.cost.total` from the model registry's `cost`
+  // (per-1M-token rates), and the DeepSeek registry copy is always the PEAK
+  // price. The period-aware rates fetched here never reached that computation,
+  // so budget.db recorded peak cost even off-peak. We re-register the DeepSeek
+  // provider with the rates for the period currently in effect; pi re-resolves
+  // the current model after registerProvider, so the next request is priced
+  // correctly.
+  let appliedPeriod: Period | null = null;
+  let appliedPricesAt = 0;
+
+  function applyRegistryRates(ctx: ExtensionContext, force = false): void {
+    const data = getRates();
+    if (!data) return; // no rates yet — leave the (peak) registry untouched
+    const period = currentPeriod(data);
+    if (!force && appliedPeriod === period && appliedPricesAt === data.pricesFetchedAt) return;
+
+    let models: DeepSeekModelDef[];
+    try {
+      models = ctx.modelRegistry.getAll() as unknown as DeepSeekModelDef[];
+    } catch {
+      return; // stale ctx (headless shutdown/reload)
+    }
+    const deepseek = models.filter((m) => m.provider === "deepseek");
+    if (deepseek.length === 0) return;
+
+    const defs = deepseek.map((m) => {
+      const r = ratesFor(data, m.id);
+      const cost = r ? deepSeekCost(r, period) : m.cost;
+      return { ...m, cost };
+    });
+
+    try {
+      pi.registerProvider("deepseek", { models: defs as never });
+      appliedPeriod = period;
+      appliedPricesAt = data.pricesFetchedAt;
+    } catch {
+      /* best-effort: the badge and model-prices display keep working regardless */
+    }
+  }
+
+  function safeApplyRegistryRates(ctx: ExtensionContext | null, force = false): void {
+    if (!ctx || ctx !== lastCtx) return;
+    applyRegistryRates(ctx, force);
+  }
 
   // Session cache accounting: input tokens served from the KV cache (hit) vs
   // processed from scratch (miss). Seeded from the session file so a resumed
@@ -136,9 +207,16 @@ export default function deepseekRates(pi: ExtensionAPI) {
     if (timer) return;
     timer = setInterval(() => {
       // 5-minute cycle: refresh the peak/off-peak badge (local clock math),
-      // and pull prices only when the cache is older than a day.
-      safeRender(lastCtx);
-      void ensureRates().then(() => safeRender(lastCtx));
+      // re-apply the period-aware registry cost (catches period rollovers and
+      // any catalog re-fetch that reset DeepSeek back to peak), and pull prices
+      // only when the cache is older than a day.
+      const ctx = lastCtx;
+      safeApplyRegistryRates(ctx, true);
+      safeRender(ctx);
+      void ensureRates().then(() => {
+        safeApplyRegistryRates(ctx);
+        safeRender(ctx);
+      });
     }, REFRESH_MS);
     // do not keep the process alive only for this timer
     const t = timer as unknown as { unref?: () => void };
@@ -198,15 +276,23 @@ export default function deepseekRates(pi: ExtensionAPI) {
   function tick(ctx: ExtensionContext): void {
     lastCtx = ctx;
     render(ctx);
+    applyRegistryRates(ctx);
     if (ctx.model?.provider === "deepseek") {
       ensureTimer();
       // ensureRates() is a no-op unless the cached prices are older than a day.
-      void ensureRates().then(() => safeRender(ctx));
+      void ensureRates().then(() => {
+        safeApplyRegistryRates(ctx);
+        safeRender(ctx);
+      });
     }
   }
 
   pi.on("session_start", async (_event, ctx) => {
     seedUsageFromSession(ctx);
+    // Re-apply for this session: the registry may have been re-fetched (back to
+    // peak) since the last session, and the guard below would otherwise skip it.
+    appliedPeriod = null;
+    appliedPricesAt = 0;
     tick(ctx);
   });
   pi.on("turn_end", async (_event, ctx) => tick(ctx));

@@ -350,6 +350,39 @@ export function deepSeekCost(r: ModelRates, period: Period): CostLike {
   };
 }
 
+/** Token usage of a single request, as reported by the provider. */
+export interface UsageTokens {
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}
+
+/** Per-request cost in USD, matching pi core's `usage.cost` breakdown. */
+export interface RequestCost extends CostLike {
+  total: number;
+}
+
+/**
+ * Cost of a single request in USD for the given billing period, mirroring pi
+ * core's `calculateCost()` (rates are USD per 1M tokens, multiplied by the
+ * request token counts). This is the number pi-agent-budget persists as
+ * `cost_total`, so it must use the period currently in effect — off-peak is
+ * half of peak for every DeepSeek metric.
+ */
+export function deepSeekRequestCost(
+  r: ModelRates,
+  period: Period,
+  usage: UsageTokens,
+): RequestCost {
+  const rates = deepSeekCost(r, period);
+  const input = ((usage.input ?? 0) / 1_000_000) * (rates.input ?? 0);
+  const output = ((usage.output ?? 0) / 1_000_000) * (rates.output ?? 0);
+  const cacheRead = ((usage.cacheRead ?? 0) / 1_000_000) * (rates.cacheRead ?? 0);
+  const cacheWrite = ((usage.cacheWrite ?? 0) / 1_000_000) * (rates.cacheWrite ?? 0);
+  return { input, output, cacheRead, cacheWrite, total: input + output + cacheRead + cacheWrite };
+}
+
 /** True when the catalogue contains at least one DeepSeek model. */
 export function hasDeepSeek(models: readonly PricedModel[]): boolean {
   return models.some((m) => m.provider === "deepseek" || /^deepseek/i.test(m.id));
