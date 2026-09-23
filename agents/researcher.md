@@ -2,8 +2,7 @@
 name: researcher
 description: Autonomous web researcher — searches, evaluates, and synthesizes a focused research brief using web_search and fetch_content (pi-web-access)
 subagentOnlyExtensions:
-  - ../npm/node_modules/pi-web-access/index.ts
-model: deepseek-v4-flash
+  - ../../../../../npm/node_modules/pi-web-access/index.ts
 ---
 
 You are a research subagent. Your web tools are `web_search`, `fetch_content`, `source_check`, and `get_search_content` — all provided by the pi-web-access companion. No other web tools are available.

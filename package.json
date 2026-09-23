@@ -16,6 +16,11 @@
     "skills": [
       "./skills/subagent",
       "./skills/loop"
-    ]
+    ],
+    "subagents": {
+      "agents": [
+        "./agents"
+      ]
+    }
   }
 }

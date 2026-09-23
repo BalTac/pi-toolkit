@@ -1,14 +1,14 @@
 ---
-name: researcher
+name: researcher-orchestrator
 description: Autonomous web researcher — delegates to analyst, scout, and other subagents, then synthesizes findings with a powerful model
 extensions:
-  - ../npm/node_modules/pi-web-access/index.ts
-  - ../npm/node_modules/pi-intercom/index.ts
+  - ../../../../../npm/node_modules/pi-web-access/index.ts
+  - ../../../../../npm/node_modules/pi-intercom/index.ts
 allowNestedSubagents: true
 excludeTools: bash, edit
 subagentOnlyExtensions:
-  - ../npm/node_modules/pi-web-access/index.ts
-  - ../npm/node_modules/pi-intercom/index.ts
+  - ../../../../../npm/node_modules/pi-web-access/index.ts
+  - ../../../../../npm/node_modules/pi-intercom/index.ts
 thinking: high
 systemPromptMode: replace
 inheritProjectContext: true
