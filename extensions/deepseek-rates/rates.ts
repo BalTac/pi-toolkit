@@ -15,18 +15,18 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { homedir } from "node:os";
 
-export const PRICING_URL = "https://api-docs.deepseek.com/quick_start/pricing/";
-export const MODELS_URL = "https://api.deepseek.com/models";
-export const PRICES_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
-export const FETCH_TIMEOUT_MS = 10_000;
-export const CACHE_PATH = path.join(homedir(), ".pi", "deepseek-rates-cache.json");
+const PRICING_URL = "https://api-docs.deepseek.com/quick_start/pricing/";
+const MODELS_URL = "https://api.deepseek.com/models";
+const PRICES_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
+const FETCH_TIMEOUT_MS = 10_000;
+const CACHE_PATH = path.join(homedir(), ".pi", "deepseek-rates-cache.json");
 
 // ── Types ───────────────────────────────────────────────────────────────
 
 export type Period = "off" | "peak";
 export type Metric = "cacheHit" | "cacheMiss" | "output";
 
-export interface MetricRates {
+interface MetricRates {
   off: number;
   peak: number;
 }
@@ -37,7 +37,7 @@ export interface ModelRates {
   output: MetricRates;
 }
 
-export interface PeakWindow {
+interface PeakWindow {
   start: number; // inclusive UTC hour
   end: number; // exclusive UTC hour
 }
@@ -57,7 +57,7 @@ export interface CostLike {
   cacheWrite?: number;
 }
 
-export interface PricedModel {
+interface PricedModel {
   provider: string;
   id: string;
   cost?: CostLike | null;
@@ -70,7 +70,7 @@ export const DEFAULT_PEAK_WINDOWS: PeakWindow[] = [
 ];
 
 // Retired names that the docs say are billed at another model's price.
-export const LEGACY_ALIASES: Record<string, string> = {
+const LEGACY_ALIASES: Record<string, string> = {
   "deepseek-v4-flash": "deepseek-flash",
   "deepseek-v4-flash-vision-exp": "deepseek-flash",
 };
@@ -88,7 +88,16 @@ function stripHtml(s: string): string {
     .trim();
 }
 
-export function emptyRates(): ModelRates {
+// Shared per-1M rate formatting (deepseek-rates status line + model-prices picker).
+export function formatRate(v: number | undefined): string | null {
+  if (v === undefined || v === null || !Number.isFinite(v)) return null;
+  if (v === 0) return "0";
+  if (v >= 1) return v.toFixed(2);
+  if (v >= 0.01) return v.toFixed(3).replace(/\.?0+$/, "");
+  return v.toFixed(4).replace(/\.?0+$/, "");
+}
+
+function emptyRates(): ModelRates {
   return {
     cacheHit: { off: 0, peak: 0 },
     cacheMiss: { off: 0, peak: 0 },
@@ -97,7 +106,7 @@ export function emptyRates(): ModelRates {
 }
 
 /** True when an entry actually carries prices (all-zero entries mean "unknown"). */
-export function hasAnyRate(r: ModelRates | undefined): r is ModelRates {
+function hasAnyRate(r: ModelRates | undefined): r is ModelRates {
   if (!r) return false;
   return (
     r.cacheMiss.off > 0 ||
@@ -185,7 +194,7 @@ export function currentPeriod(data: RatesData | null, now: Date = new Date()): P
 
 // ── Cache ───────────────────────────────────────────────────────────────
 
-export function readCache(): RatesData | null {
+function readCache(): RatesData | null {
   try {
     const raw = JSON.parse(fs.readFileSync(CACHE_PATH, "utf8")) as RatesData & {
       fetchedAt?: number; // older field name, migrated on read
@@ -201,7 +210,7 @@ export function readCache(): RatesData | null {
   }
 }
 
-export function writeCache(data: RatesData): void {
+function writeCache(data: RatesData): void {
   try {
     fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
     const tmp = `${CACHE_PATH}.tmp-${process.pid}`;
@@ -214,7 +223,7 @@ export function writeCache(data: RatesData): void {
 
 // ── Fetch ───────────────────────────────────────────────────────────────
 
-export async function fetchText(url: string): Promise<string> {
+async function fetchText(url: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -229,7 +238,7 @@ export async function fetchText(url: string): Promise<string> {
   }
 }
 
-export function readDeepSeekKey(): string | undefined {
+function readDeepSeekKey(): string | undefined {
   if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_API_KEY;
   try {
     const auth = JSON.parse(
@@ -242,7 +251,7 @@ export function readDeepSeekKey(): string | undefined {
 }
 
 /** Real API call to notice new/renamed models (carries no pricing). */
-export async function fetchModelIds(): Promise<string[]> {
+async function fetchModelIds(): Promise<string[]> {
   try {
     const key = readDeepSeekKey();
     if (!key) return [];
@@ -279,8 +288,8 @@ export function getRates(): RatesData | null {
   return store;
 }
 
-/** Overwrite the in-memory store (used by tests). */
-export function setRates(data: RatesData | null): void {
+/** Overwrite the in-memory store. */
+function setRates(data: RatesData | null): void {
   store = data;
   storeLoaded = true;
 }
@@ -351,7 +360,7 @@ export function deepSeekCost(r: ModelRates, period: Period): CostLike {
 }
 
 /** Token usage of a single request, as reported by the provider. */
-export interface UsageTokens {
+interface UsageTokens {
   input?: number;
   output?: number;
   cacheRead?: number;
@@ -359,7 +368,7 @@ export interface UsageTokens {
 }
 
 /** Per-request cost in USD, matching pi core's `usage.cost` breakdown. */
-export interface RequestCost extends CostLike {
+interface RequestCost extends CostLike {
   total: number;
 }
 

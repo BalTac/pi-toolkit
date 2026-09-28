@@ -27,7 +27,7 @@
 
 import type { ExtensionContext, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs";
-import { currentPeriod, deepSeekCost, ensureRates, getRates, ratesFor, type ModelRates, type Period } from "./rates.ts";
+import { currentPeriod, deepSeekCost, ensureRates, formatRate as fmtRate, getRates, ratesFor, type ModelRates, type Period } from "./rates.ts";
 
 // Re-exported for tests and backwards compatibility.
 export { parsePricing, peakPeriod } from "./rates.ts";
@@ -61,12 +61,6 @@ const STATUS_ID = "deepseek-rates";
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes — re-evaluate the peak badge
 
 // ── Formatting ──────────────────────────────────────────────────────────
-
-function fmtRate(v: number): string {
-  if (v >= 1) return v.toFixed(2);
-  if (v >= 0.01) return v.toFixed(3).replace(/\.?0+$/, "");
-  return v.toFixed(4).replace(/\.?0+$/, "");
-}
 
 function fmtStatus(
   rates: ModelRates | null,

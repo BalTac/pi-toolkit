@@ -10,14 +10,14 @@
  *   - Sortable full table of every model
  */
 
-export interface ReportCost {
+interface ReportCost {
   input?: number;
   output?: number;
   cacheRead?: number;
   cacheWrite?: number;
 }
 
-export interface ReportModel {
+interface ReportModel {
   provider: string;
   id: string;
   name?: string;
@@ -33,7 +33,7 @@ const PALETTE = [
   "#f07cb9", "#a3e635", "#f87171", "#67e8f9", "#c4b5fd",
 ];
 
-export interface PeakConfig {
+interface PeakConfig {
   windows: { start: number; end: number }[];
   weekdaysOnly: boolean;
 }

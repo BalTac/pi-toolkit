@@ -33,19 +33,14 @@ import {
   currentPeriod,
   DEFAULT_PEAK_WINDOWS,
   ensureRates,
+  formatRate as fmtRate,
   hasDeepSeek,
+  type CostLike,
   type Period,
   type RatesData,
 } from "../deepseek-rates/rates.ts";
 
 // ── Types ───────────────────────────────────────────────────────────────
-
-interface CostLike {
-  input?: number;
-  output?: number;
-  cacheRead?: number;
-  cacheWrite?: number;
-}
 
 interface ModelLike {
   provider: string;
@@ -73,14 +68,6 @@ function peakConfigOf(data: RatesData | null): {
 }
 
 // ── Formatting helpers ──────────────────────────────────────────────────
-
-function fmtRate(v: number | undefined): string | null {
-  if (v === undefined || v === null || !Number.isFinite(v)) return null;
-  if (v === 0) return "0";
-  if (v >= 1) return v.toFixed(2);
-  if (v >= 0.01) return v.toFixed(3).replace(/\.?0+$/, "");
-  return v.toFixed(4).replace(/\.?0+$/, "");
-}
 
 function fmtCtx(tokens: number | undefined): string {
   if (!tokens || tokens <= 0) return "";
@@ -344,16 +331,6 @@ export default function modelPrices(pi: ExtensionAPI) {
     handler: openPicker,
   });
 
-  pi.registerCommand("prices", {
-    description: "Compare model prices (input/output per 1M tokens) and switch models",
-    handler: openPicker,
-  });
-
-  pi.registerCommand("model-prices", {
-    description: "Compare model prices (input/output per 1M tokens) and switch models",
-    handler: openPicker,
-  });
-
   // ── Pricing report (HTML) ────────────────────────────────────────────
   // /pricing-report [path] — generates a self-contained HTML page with
   // charts (by type, category, provider, price bracket), filters and a
@@ -400,16 +377,6 @@ export default function modelPrices(pi: ExtensionAPI) {
   };
 
   pi.registerCommand("pricing-report", {
-    description: "Generate an HTML pricing report (charts by type/category/provider/price bracket) with model comparison picker",
-    handler: generateReport,
-  });
-
-  pi.registerCommand("price-report", {
-    description: "Generate an HTML pricing report (charts by type/category/provider/price bracket) with model comparison picker",
-    handler: generateReport,
-  });
-
-  pi.registerCommand("pricing-html", {
     description: "Generate an HTML pricing report (charts by type/category/provider/price bracket) with model comparison picker",
     handler: generateReport,
   });

@@ -21,14 +21,14 @@ function eq(name: string, got: unknown, want: unknown): void {
 	ok(name, JSON.stringify(got) === JSON.stringify(want), `(got ${JSON.stringify(got)} want ${JSON.stringify(want)})`);
 }
 
-const BASE = mkdtempSync(`${tmpdir()}\\ret-test-`);
-function freshDir(): string { return mkdtempSync(`${BASE}\\d-`); }
+const BASE = mkdtempSync(`${tmpdir()}/ret-test-`);
+function freshDir(): string { return mkdtempSync(`${BASE}/d-`); }
 function makeEntry(dir: string, id: string, opts: { project?: string; ageDays?: number; size?: number; recallDaysAgo?: number | null } = {}): void {
 	const size = opts.size ?? 1000;
 	const ageDays = opts.ageDays ?? 0;
 	const created = new Date(NOW - ageDays * DAY).toISOString();
-	writeFileSync(`${dir}\\${id}.memory.md`, `# Context memory ${id}\n`, "utf8");
-	writeFileSync(`${dir}\\${id}.archive.jsonl`, "x".repeat(size), "utf8");
+	writeFileSync(`${dir}/${id}.memory.md`, `# Context memory ${id}\n`, "utf8");
+	writeFileSync(`${dir}/${id}.archive.jsonl`, "x".repeat(size), "utf8");
 	registerMemory(dir, id, { created, project: opts.project ?? "P", bytes: size, archive: `${id}.archive.jsonl` });
 	if (opts.recallDaysAgo !== undefined && opts.recallDaysAgo !== null) recordRecall(dir, id, NOW - opts.recallDaysAgo * DAY);
 }
@@ -94,8 +94,8 @@ console.log("\n=== 4) [FIX C] la finestra di cancellazione parte dalla ROTAZIONE
 	eq("ruotata", r.rotated, ["vecchia"]);
 	eq("NON eliminata (rotatedAt=ora)", r.deleted, []);
 	eq("status rotated", readRetention(dir).entries["vecchia"].status, "rotated");
-	ok("il .gz esiste ancora", existsSync(`${dir}\\vecchia.archive.jsonl.gz`));
-	ok("la .memory.md resta", existsSync(`${dir}\\vecchia.memory.md`));
+	ok("il .gz esiste ancora", existsSync(`${dir}/vecchia.archive.jsonl.gz`));
+	ok("la .memory.md resta", existsSync(`${dir}/vecchia.memory.md`));
 
 	// stessa entry ma ruotata 100 giorni fa -> eliminata
 	const dir2 = freshDir();
@@ -105,13 +105,13 @@ console.log("\n=== 4) [FIX C] la finestra di cancellazione parte dalla ROTAZIONE
 	idx2.entries["ruotata-da-tempo"].status = "rotated";
 	idx2.entries["ruotata-da-tempo"].archive = "ruotata-da-tempo.archive.jsonl.gz";
 	idx2.entries["ruotata-da-tempo"].rotatedAt = new Date(NOW - 100 * DAY).toISOString();
-	writeFileSync(`${dir2}\\ruotata-da-tempo.archive.jsonl.gz`, "gz", "utf8");
-	unlinkSync(`${dir2}\\ruotata-da-tempo.archive.jsonl`);
+	writeFileSync(`${dir2}/ruotata-da-tempo.archive.jsonl.gz`, "gz", "utf8");
+	unlinkSync(`${dir2}/ruotata-da-tempo.archive.jsonl`);
 	writeRetention(dir2, idx2);
 	const r2 = sweepRetention(dir2, CFG({ budgetMB: 0, rotateAfterDays: 30, deleteAfterDays: 90 }), { now: NOW, currentProject: "P" });
 	eq("eliminata dopo la finestra di rotazione", r2.deleted, ["ruotata-da-tempo"]);
 	eq("status deleted", readRetention(dir2).entries["ruotata-da-tempo"].status, "deleted");
-	ok("la .memory.md resta anche dopo l'eliminazione", existsSync(`${dir2}\\ruotata-da-tempo.memory.md`));
+	ok("la .memory.md resta anche dopo l'eliminazione", existsSync(`${dir2}/ruotata-da-tempo.memory.md`));
 }
 
 console.log("\n=== 5) protezione: progetto corrente e richiami recenti ===");
