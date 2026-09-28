@@ -81,6 +81,12 @@ const COMPANIONS: Companion[] = [
     kind: "recommended",
     note: "caveman speaking style: terser replies on demand (/caveman), off by default; output-side only, ~-27% output tokens per call measured",
   },
+  {
+    source: "npm:@bacnh85/pi-ponytail",
+    name: "pi-ponytail",
+    kind: "recommended",
+    note: "lazy senior dev mode for pi: injects the ruleset into subagents too + review/audit/debt skills (/ponytail full, /ponytail-review, /ponytail-audit); fork of github.com/DietrichGebert/ponytail (check upstream for improvements)",
+  },
 ];
 
 function normalizeSource(spec: string): string {
