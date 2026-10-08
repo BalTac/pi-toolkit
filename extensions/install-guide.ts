@@ -61,7 +61,7 @@ const COMPANIONS: Companion[] = [
     source: "npm:pi-agent-budget",
     name: "pi-agent-budget",
     kind: "recommended",
-    note: "cost / budget tracking (/budget)",
+    note: "cost / budget tracking (/budget); needs the better-sqlite3 pin in ~/.pi/agent/npm/package.json (overrides + allowScripts) or the extension fails to load — see README step 2",
   },
   {
     source: "npm:pi-ssh-remote",
@@ -82,10 +82,16 @@ const COMPANIONS: Companion[] = [
     note: "caveman speaking style: terser replies on demand (/caveman), off by default; output-side only, ~-27% output tokens per call measured",
   },
   {
+    source: "git:github.com/DietrichGebert/ponytail",
+    name: "ponytail",
+    kind: "recommended",
+    note: "lazy senior dev mode: one pi extension injects the ruleset every turn + /ponytail lite|full|ultra, /ponytail-review, /ponytail-audit, /ponytail-debt, /ponytail-gain, /ponytail-help",
+  },
+  {
     source: "npm:@bacnh85/pi-ponytail",
     name: "pi-ponytail",
     kind: "recommended",
-    note: "lazy senior dev mode for pi: injects the ruleset into subagents too + review/audit/debt skills (/ponytail full, /ponytail-review, /ponytail-audit); fork of github.com/DietrichGebert/ponytail (check upstream for improvements)",
+    note: "alternative fork of the ponytail above: same ruleset, but it also injects it into subagent children (scout/worker/planner) via a tool_call hook; prefer upstream unless you need that",
   },
 ];
 

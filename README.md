@@ -99,7 +99,8 @@ pi install npm:pi-agent-budget               # recommended — cost / budget tra
 pi install npm:pi-ssh-remote                 # recommended — persistent remote SSH workspaces (/remote)
 pi install npm:@zosmaai/pi-llm-wiki          # recommended — Karpathy LLM-wiki knowledge base (/wiki-init, /wiki-ingest, wiki_lint)
 pi install npm:@vanillagreen/pi-caveman      # recommended — caveman style: terser replies on demand (/caveman), off by default
-pi install npm:@bacnh85/pi-ponytail          # recommended — lazy senior dev mode for pi: subagent-aware rules + review/audit/debt (/ponytail full, /ponytail-review); fork of github.com/DietrichGebert/ponytail
+pi install git:github.com/DietrichGebert/ponytail   # recommended — lazy senior dev mode: a pi extension injects the ruleset every turn + /ponytail lite|full|ultra, /ponytail-review, /ponytail-audit, /ponytail-debt, /ponytail-gain, /ponytail-help
+pi install npm:@bacnh85/pi-ponytail          # recommended (alternative) — same ruleset, fork that also injects it into subagent children (scout/worker/planner); upstream tracks it more closely, so prefer the line above unless you need the subagent injection
 ```
 
 **On `caveman` (measured, not assumed).** The extension only shortens **output**, and output was
@@ -116,6 +117,56 @@ smaller than the **65%** the upstream README advertises. It is off by default: e
 > `401` — it breaks the agent outright, and the fallback it advertises does not trigger. The
 > `caveman wrap pi` path is safe but declares **pass-through** for DeepSeek ("no compat mount named
 > deepseek in the local proxy"), so it compresses nothing.
+
+**On `ponytail` (checked at v5.1.0).** Upstream is a **pi package**, not just a pile of markdown: ponytail's
+`pi` manifest ships one extension (`pi-extension/index.js`) that injects the ruleset every
+turn plus the skill set (`skills/`), so `pi install git:github.com/DietrichGebert/ponytail` is enough
+— no copy-paste of `AGENTS.md` needed. It stays active until `stop ponytail` / `normal mode`, and the
+level is switchable mid-session with `/ponytail lite|full|ultra` (`full` is the default). The numbers in the upstream README
+(**−53% code · −41% time · −26% cost · −45% tokens**) are **upstream's own benchmark** in Claude Code
+(39 tasks, Opus 5.5, 5 runs each) — **not** measured on this machine, so treat them as the author's
+claim rather than as a local result. What is verifiable locally is the *mechanism*: it is
+output/behaviour shaping plus a ruleset in the prompt, it costs prompt tokens every turn, and it
+changes nothing about the model or the provider.
+
+**On `pi-agent-budget` and `better-sqlite3` (read this if `/budget` fails to load).**
+`pi-agent-budget` depends on `better-sqlite3` `^11.5.0`, i.e. npm resolves **11.10.0**, whose native
+binding exists **only after its install script runs** (`prebuild-install || node-gyp rebuild`). pi
+installs npm companions into `~/.pi/agent/npm/`, and the npm bundled with pi (12.x) **blocks every
+install script that is not listed in `allowScripts`** — so the binding is never built, the extension
+fails at load, and every `pi install` / `pi update` prints
+`npm warn install-scripts ... better-sqlite3 ... not covered by allowScripts`. The fix is to
+**force `better-sqlite3` to a newer major with an `overrides` block** — 13.x ships prebuilt binaries
+for every platform *inside the tarball*, so it loads even while scripts stay blocked — and to approve
+the script as a fallback. This is the configuration already running on this machine
+(`~/.pi/agent/npm/package.json`, top level, next to `dependencies`):
+
+```json
+{
+  "overrides": {
+    "better-sqlite3": "13.0.3"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
+  }
+}
+```
+
+Then re-resolve from that directory — `cd ~/.pi/agent/npm && npm install`, **not** `pi install`, so
+pi does not rewrite the manifest — and verify:
+
+```bash
+cd ~/.pi/agent/npm
+npm ls better-sqlite3                                  # pi-agent-budget -> better-sqlite3@13.0.3 overridden
+node -e "require('better-sqlite3')"                   # no output = native binding OK
+```
+
+Keep both blocks: pi rewrites `dependencies` on install/update but leaves `overrides` /
+`allowScripts` alone, and without the override the next fresh resolve silently drops back to
+11.10.0 and the binding disappears again. The same `overrides` entry dedupes
+`@tobilu/qmd -> better-sqlite3` used by [pi-llm-wiki](https://github.com/zosmaai/pi-llm-wiki) indexing, so one pin serves both.
+The other entries you may see in that `allowScripts` block (`esbuild`, `ssh2`, `cpu-features: false`)
+belong to `pi-web-access` / `pi-ssh-remote`, not to the budget extension.
 
 ### 3. Configure models for subagents
 
@@ -291,10 +342,11 @@ Pairs well with the `loop` skill and with `subagent` delegation (a goal step can
 - **Recommended** companions:
   - [pi-intercom](https://github.com/nicobailon/pi-intercom) (`pi install npm:pi-intercom`) — cross-session messaging
   - [pi-usage](https://github.com/narumiruna/pi-extensions) (`pi install npm:@narumitw/pi-usage`) — provider usage/credit dashboard
-  - [pi-agent-budget](https://github.com/nicobailon/pi-agent-budget) (`pi install npm:pi-agent-budget`) — cost/budget tracking
+  - [pi-agent-budget](https://github.com/RexYoung000/pi-agent-budget) (`pi install npm:pi-agent-budget`) — cost/budget tracking; needs the `better-sqlite3` `overrides` + `allowScripts` pin in `~/.pi/agent/npm/package.json` or `/budget` will not load (step 2 above)
   - [pi-ssh-remote](https://github.com/petrichor20211/pi-ssh-remote) (`pi install npm:pi-ssh-remote`) — persistent remote SSH workspaces
   - [pi-llm-wiki](https://github.com/zosmaai/pi-llm-wiki) (`pi install npm:@zosmaai/pi-llm-wiki`) — Karpathy LLM-wiki knowledge base (project + personal vault, lint, recall)
-  - [pi-ponytail](https://github.com/bacnh85/pi-extensions/tree/main/pi-ponytail) (`pi install npm:@bacnh85/pi-ponytail`) — lazy senior dev mode for pi (subagent-aware rules + review/audit/debt); fork of [ponytail](https://github.com/DietrichGebert/ponytail) — check upstream for improvements
+  - [ponytail](https://github.com/DietrichGebert/ponytail) (`pi install git:github.com/DietrichGebert/ponytail`) — lazy senior dev mode for pi: one extension injecting the ruleset every turn + `/ponytail lite|full|ultra`, `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`, `/ponytail-gain`, `/ponytail-help`
+  - [pi-ponytail](https://github.com/bacnh85/pi-extensions/tree/main/pi-ponytail) (`pi install npm:@bacnh85/pi-ponytail`) — alternative fork of the above: same ruleset, but it also injects it into subagent children (scout/worker/planner); prefer upstream unless you need that
 
 ## Tests
 
