@@ -29,6 +29,8 @@ interface Companion {
   /** Human-readable name. */
   name: string;
   kind: "required" | "recommended";
+  /** Optional grouping; companions without one fall back to their kind. */
+  category?: string;
   note: string;
 }
 
@@ -93,6 +95,35 @@ const COMPANIONS: Companion[] = [
     kind: "recommended",
     note: "alternative fork of the ponytail above: same ruleset, but it also injects it into subagent children (scout/worker/planner) via a tool_call hook; prefer upstream unless you need that",
   },
+  // ── computer-use ────────────────────────────────────────────────────────
+  // Driving the machine itself: desktop apps and a real browser. Listed
+  // together because they overlap in practice (open the browser, navigate,
+  // download a file is still "using the PC") and because choosing between
+  // them is the actual decision — see each note.
+  {
+    source: "npm:@injaneity/pi-computer-use",
+    name: "pi-computer-use",
+    kind: "recommended",
+    category: "computer-use",
+    note:
+      "observe and drive desktop apps and a CDP browser: find_roots, observe_ui, search_ui, expand_ui, inspect_ui, act_ui, read_text, wait_for, launch_browser, navigate_browser, evaluate_browser. Browser pages use the Chrome/Helium accessibility tree, not screenshots. Needs /reload after install; the Windows helper self-installs to ~/.pi/agent/helpers/pi-computer-use/. Known limits measured on Win11: no download API at all (page never saved, Downloads untouched), typeText/setText truncate at ~31 chars in Notepad's WinUI editor (use clipboard + Ctrl+V), and search_ui rejects CDP page states",
+  },
+  {
+    source: "npm:pi-playwright",
+    name: "pi-playwright",
+    kind: "recommended",
+    category: "computer-use",
+    note:
+      "same territory from the Playwright side: open/goto/snapshot/find/click/fill/pdf/state-save via a skill. Pick it for downloads, which pi-computer-use cannot do at all (page.on('download') + saveAs()), and for persistent logged-in sessions (storageState). Two manual steps are required because the published package ships neither the CLI dep nor a browser: `cd ~/.pi/agent/npm/node_modules/pi-playwright && npm install && npx playwright install chromium`. Note that plain Playwright is 403'd by eBay; drive real Chrome via connectOverCDP for that",
+  },
+  {
+    source: "npm:@agent-sh/computer-use-linux",
+    name: "computer-use-linux",
+    kind: "recommended",
+    category: "computer-use",
+    note:
+      "Linux-only alternative to pi-computer-use: AT-SPI semantic trees, screenshots, EWMH window targeting and Wayland/X11 input, plus an MCP server. Prefer it over pi-computer-use when the desktop is Linux; keep pi-computer-use for macOS/Windows",
+  },
 ];
 
 function normalizeSource(spec: string): string {
@@ -129,18 +160,46 @@ function listMissing(installed: Set<string>): Companion[] {
   return COMPANIONS.filter((c) => !isInstalled(c, installed));
 }
 
+function groupOf(c: Companion): string {
+  return c.category ?? (c.kind === "required" ? "core" : "general");
+}
+
+const GROUP_TITLES: Record<string, string> = {
+  core: "Core — required",
+  general: "General — recommended",
+  "computer-use": "Computer use — recommended",
+};
+
 function formatGuide(missing: Companion[]): string {
   if (missing.length === 0) {
     return "All pi-toolkit companion packages are installed. Nothing to do.";
   }
-  const lines = missing.map(
-    (c) => `- ${c.name} (${c.kind}) — ${c.note}\n    pi install ${c.source}`
-  );
+
+  const order: string[] = [];
+  const buckets = new Map<string, Companion[]>();
+  for (const c of missing) {
+    const g = groupOf(c);
+    if (!buckets.has(g)) {
+      buckets.set(g, []);
+      order.push(g);
+    }
+    buckets.get(g)!.push(c);
+  }
+
+  const blocks = order.map((g) => {
+    const lines = buckets.get(g)!.map(
+      (c) => `- ${c.name} (${c.kind}) — ${c.note}\n    pi install ${c.source}`
+    );
+    return `${GROUP_TITLES[g] ?? g}\n${lines.join("\n")}`;
+  });
+
   return (
     "Missing pi-toolkit companion packages:\n\n" +
-    lines.join("\n") +
+    blocks.join("\n\n") +
     "\n\nInstall each with the command shown. " +
-    "Required packages are needed for core features (web access, subagent delegation); recommended are optional."
+    "Required packages are needed for core features (web access, subagent delegation); recommended are optional. " +
+    "Computer-use packages all drive the machine itself — they overlap, so install the one that matches your platform and task " +
+    "(pi-computer-use for macOS/Windows desktop + browser, computer-use-linux on Linux, pi-playwright for downloads and logged-in sessions)."
   );
 }
 
@@ -167,7 +226,7 @@ export default function installGuide(pi: ExtensionAPI) {
     name: "pi_toolkit_install_guide",
     label: "pi-toolkit Install Guide",
     description:
-      "List the required and recommended third-party companion packages for pi-toolkit that are not yet installed, with the exact 'pi install' commands.",
+      "List the required and recommended third-party companion packages for pi-toolkit that are not yet installed, grouped by category (computer use included), with the exact 'pi install' commands.",
     promptSnippet:
       "After installing or updating pi-toolkit, call this tool to see which companion packages still need installing.",
     promptGuidelines: [
@@ -180,7 +239,7 @@ export default function installGuide(pi: ExtensionAPI) {
       const text = formatGuide(missing);
       return {
         content: [{ type: "text", text }],
-        details: { missing: missing.map((c) => ({ name: c.name, kind: c.kind, source: c.source })), total: missing.length },
+        details: { missing: missing.map((c) => ({ name: c.name, kind: c.kind, category: groupOf(c), source: c.source })), total: missing.length },
       };
     },
   });

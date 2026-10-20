@@ -1,6 +1,6 @@
 {
   "name": "pi-toolkit",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Skills, extensions & tools for pi coding agent — subagent delegation, autonomous engineering loop, goal-mode roadmaps, auto-compaction with durable context memory and archive retention, DeepSeek rate/peak indicator, provider usage guide. Ships no third-party pi packages; companion packages are surfaced by a post-install notification.",
   "author": "BalTac",
   "license": "MIT",

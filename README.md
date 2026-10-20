@@ -101,6 +101,9 @@ pi install npm:@zosmaai/pi-llm-wiki          # recommended — Karpathy LLM-wiki
 pi install npm:@vanillagreen/pi-caveman      # recommended — caveman style: terser replies on demand (/caveman), off by default
 pi install git:github.com/DietrichGebert/ponytail   # recommended — lazy senior dev mode: a pi extension injects the ruleset every turn + /ponytail lite|full|ultra, /ponytail-review, /ponytail-audit, /ponytail-debt, /ponytail-gain, /ponytail-help
 pi install npm:@bacnh85/pi-ponytail          # recommended (alternative) — same ruleset, fork that also injects it into subagent children (scout/worker/planner); upstream tracks it more closely, so prefer the line above unless you need the subagent injection
+pi install npm:@injaneity/pi-computer-use     # recommended (computer use) — drive desktop apps + a CDP browser (macOS/Windows/Linux)
+pi install npm:pi-playwright                 # recommended (computer use) — Playwright skill: scriptable browser, downloads, logged-in sessions (needs 2 manual steps, see below)
+pi install npm:@agent-sh/computer-use-linux   # recommended (computer use, Linux only) — AT-SPI / X11 / Wayland alternative to pi-computer-use
 ```
 
 **On `caveman` (measured, not assumed).** The extension only shortens **output**, and output was
@@ -250,6 +253,66 @@ Web tools registered by pi-web-access:
 | `get_search_content` | Retrieve stored content from previous searches/fetches. |
 
 **Zero config:** works out of the box via Exa MCP — no API keys needed. For more providers, add keys to `~/.pi/web-search.json` (see the [pi-web-access docs](https://github.com/nicobailon/pi-web-access)).
+
+## Computer use (driving the machine)
+
+Three recommended companions overlap here: they use the PC itself instead of an API. Opening a
+browser, navigating, and downloading a file *is* physical use of the machine, so Playwright belongs
+in this group rather than in a separate "browser" bucket. Install the one that matches your
+platform and task — they are grouped under **Computer use** in `/pi-toolkit-deps` and
+`pi_toolkit_install_guide`.
+
+| Package | Platform | Use it for |
+|---|---|---|
+| `@injaneity/pi-computer-use` | macOS 14+, Windows, Linux | Desktop apps and a CDP browser: `find_roots`, `observe_ui`, `search_ui`, `expand_ui`, `inspect_ui`, `act_ui`, `read_text`, `wait_for`, `launch_browser`, `navigate_browser`, `evaluate_browser` |
+| `pi-playwright` | any (bundled Chromium) | Scriptable browser automation, downloads, persistent logged-in sessions |
+| `@agent-sh/computer-use-linux` | Linux only | AT-SPI semantic trees, screenshots, X11/Wayland input, plus an MCP server |
+
+**It is not screenshot-driven.** `pi-computer-use` drives browser pages through the Chrome
+accessibility tree over CDP, not pixels — the fast and deterministic path. Screenshots remain the
+fallback for when the visual result *is* the evidence (canvas, video, shadow-DOM).
+
+### Choosing between them
+
+- **Interacting with a UI** (click, type, forms, SPA): `pi-computer-use`.
+- **Getting a file onto disk**: `pi-playwright`. `pi-computer-use` has **no download API at all**
+  — no `Browser.setDownloadBehavior`, zero occurrences of "download" in its source. Measured:
+  navigating to a PDF opens the viewer and the `Downloads` folder stays untouched, and the viewer
+  toolbar is not reachable through either the CDP tree or Windows UIA.
+- **Staying logged in across sessions**: `pi-playwright` with `storageState`.
+  `pi-computer-use` launches a throwaway profile (`tmpdir/pi-chrome-cdp-<random port>`), so every
+  run starts logged out and the browser is never headless.
+- **Reading a page you only need as text**: neither — use `fetch_content` from pi-web-access.
+
+### `pi-playwright` needs two manual steps
+
+The published npm package ships neither `@playwright/cli` nor a browser, so the skill fails until:
+
+```bash
+cd ~/.pi/agent/npm/node_modules/pi-playwright
+npm install
+npx playwright install chromium
+```
+
+Its CLI also has **no `download` command** — for downloads write a script against the Playwright
+API (`page.on('download')` + `download.saveAs()`). Run it from inside the package directory, because
+ESM resolves `playwright` relative to the script file.
+
+### Known limits (measured 2026-10-20, Windows 11)
+
+- `pi-computer-use`: `typeText`/`setText` truncate at **~31 characters** in Notepad's WinUI
+  (`RichEditD2DPT`) editor, silently — `act_ui` still reports success. Workaround: put the text on
+  the clipboard and send `Ctrl+A` / `Ctrl+V` via `act_ui`; 2,204 characters arrived intact that way.
+- `pi-computer-use`: `search_ui` answers `No current controlled window` on CDP `browser_page`
+  states. Use `expand_ui` or `evaluate_browser` there; it works normally on desktop windows.
+- `pi-computer-use`: extensions load at startup, so run `/reload` after installing. The Windows
+  helper self-installs to `~/.pi/agent/helpers/pi-computer-use/windows-bridge.exe` (protocol v4,
+  newline-delimited JSON over stdio).
+- `pi-playwright`: plain Playwright is fingerprint-blocked by eBay (**HTTP 403**, empty result set,
+  `navigator.webdriver === true`). Launching real Chrome with `--remote-debugging-port` and attaching
+  via `connectOverCDP` returns 200; `--headless=new` brings the 403 back.
+- `pi-playwright`: screenshots and PDFs are written to `.playwright-cli/` in the **current working
+  directory** — the package directory when you run its wrapper. Pass an explicit path or clean up.
 
 ## Subagent delegation
 
