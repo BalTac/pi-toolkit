@@ -31,6 +31,13 @@ interface Companion {
   kind: "required" | "recommended";
   /** Optional grouping; companions without one fall back to their kind. */
   category?: string;
+  /**
+   * Other `pi install` specs that satisfy the same slot (forks, renamed
+   * packages). Without these a legitimate install keeps showing up as missing.
+   */
+  aliases?: string[];
+  /** Restrict the companion to some OSes; omit for every platform. */
+  platforms?: NodeJS.Platform[];
   note: string;
 }
 
@@ -88,11 +95,13 @@ const COMPANIONS: Companion[] = [
     name: "ponytail",
     kind: "recommended",
     note: "lazy senior dev mode: one pi extension injects the ruleset every turn + /ponytail lite|full|ultra, /ponytail-review, /ponytail-audit, /ponytail-debt, /ponytail-gain, /ponytail-help",
+    aliases: ["npm:@bacnh85/pi-ponytail"],
   },
   {
     source: "npm:@bacnh85/pi-ponytail",
     name: "pi-ponytail",
     kind: "recommended",
+    aliases: ["git:github.com/DietrichGebert/ponytail"],
     note: "alternative fork of the ponytail above: same ruleset, but it also injects it into subagent children (scout/worker/planner) via a tool_call hook; prefer upstream unless you need that",
   },
   // ── computer-use ────────────────────────────────────────────────────────
@@ -121,6 +130,7 @@ const COMPANIONS: Companion[] = [
     name: "computer-use-linux",
     kind: "recommended",
     category: "computer-use",
+    platforms: ["linux"],
     note:
       "Linux-only alternative to pi-computer-use: AT-SPI semantic trees, screenshots, EWMH window targeting and Wayland/X11 input, plus an MCP server. Prefer it over pi-computer-use when the desktop is Linux; keep pi-computer-use for macOS/Windows",
   },
@@ -148,6 +158,9 @@ function readInstalled(): Set<string> {
 
 function isInstalled(c: Companion, installed: Set<string>): boolean {
   if (installed.has(normalizeSource(c.source))) return true;
+  for (const alias of c.aliases ?? []) {
+    if (installed.has(normalizeSource(alias))) return true;
+  }
   // Accept git sources for the same package: e.g. git:github.com/nicobailon/pi-web-access
   const name = c.source.replace(/^npm:/, "");
   for (const src of installed) {
@@ -156,8 +169,12 @@ function isInstalled(c: Companion, installed: Set<string>): boolean {
   return false;
 }
 
+function appliesHere(c: Companion): boolean {
+  return !c.platforms || c.platforms.includes(process.platform);
+}
+
 function listMissing(installed: Set<string>): Companion[] {
-  return COMPANIONS.filter((c) => !isInstalled(c, installed));
+  return COMPANIONS.filter((c) => appliesHere(c) && !isInstalled(c, installed));
 }
 
 function groupOf(c: Companion): string {
